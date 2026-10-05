@@ -2,6 +2,7 @@ import filecmp
 import glob
 import os
 import shutil
+import stat
 import sys
 from datetime import datetime, UTC
 from typing import Any
@@ -509,9 +510,10 @@ class Link(Plugin):
         changes, unless force or backup is set: then the copy is updated (after
         a backup moves the old copy away). A directory is copied file by file,
         and files that are only in the copy are kept. A symlink at link_name is
-        replaced only if relink or force is set.
+        replaced only if relink or force is set, and so is a file where the
+        target is a directory (or the other way around).
 
-        Returns true if link_name is a copy of target at the end.
+        Returns true on success, which includes keeping a copy that differs.
         """
 
         source = os.path.join(
@@ -538,19 +540,36 @@ class Link(Plugin):
             if not self._remove(destination, link_name):
                 return False
             exists = False
-        if exists and not self._differs(source, destination):
-            self._log.info(f"Copy exists {link_name} -> {source}")
-            return True
-        if exists and not (force or backup):
-            self._log.info(f"Copy {link_name} differs from {source}, keeping it")
-            return True
+        # a file can't be copied over a directory, or the other way around
+        source_is_directory = os.path.isdir(source)
+        other_type = exists and source_is_directory != os.path.isdir(destination)
+        if other_type and not (force or backup):
+            expected, found = (
+                ("directory", "file") if source_is_directory else ("file", "directory")
+            )
+            self._log.warning(
+                f"{link_name} already exists but is a {found}, not a {expected}"
+            )
+            return False
+        if exists and not other_type:
+            try:
+                differs = self._differs(source, destination)
+            except OSError as e:
+                self._log.warning(f"Failed to compare {link_name} with {source}")
+                self._log.debug(f"OSError: {e!s}")
+                return False
+            if not differs:
+                self._log.info(f"Copy exists {link_name} -> {source}")
+                return True
+            if not (force or backup):
+                self._log.info(f"Copy {link_name} differs from {source}, keeping it")
+                return True
         if exists and backup:
             _, backup_success = self._backup(link_name)
             if not backup_success:
                 return False
             exists = False
-        if exists and os.path.isdir(source) != os.path.isdir(destination):
-            # a file can't be copied over a directory, or the other way around
+        if exists and other_type:
             if not self._remove(destination, link_name):
                 return False
             exists = False
@@ -560,10 +579,10 @@ class Link(Plugin):
             self._log.action(f"Would {verb} copy {link_name} -> {source}")
             return True
         try:
-            if os.path.isdir(source):
-                shutil.copytree(source, destination, dirs_exist_ok=True)
+            if source_is_directory:
+                self._copy_directory(source, destination)
             else:
-                shutil.copy2(source, destination)
+                self._copy_file(source, destination)
         except OSError as e:
             self._log.warning(f"Copying failed {link_name} -> {source}")
             self._log.debug(f"OSError: {e!s}")
@@ -572,6 +591,34 @@ class Link(Plugin):
             f"{'Updating' if exists else 'Creating'} copy {link_name} -> {source}"
         )
         return True
+
+    def _copy_file(self, source: str, destination: str) -> None:
+        """
+        Copies a file like shutil.copy2, but first removes what is at the
+        destination: a symlink there must not be followed, which would change a
+        file outside of the copy, and a read-only file can't be overwritten.
+        """
+        self._remove_path(destination)
+        shutil.copy2(source, destination)
+
+    def _copy_directory(self, source: str, destination: str) -> None:
+        """
+        Copies a directory like shutil.copytree with dirs_exist_ok, so files
+        that are only in the destination are kept. Unlike shutil.copytree, it
+        replaces a symlink in the destination instead of following it.
+        """
+        if os.path.islink(destination) or not os.path.isdir(destination):
+            self._remove_path(destination)
+            os.makedirs(destination)
+        for name in os.listdir(source):
+            source_path = os.path.join(source, name)
+            destination_path = os.path.join(destination, name)
+            # follow symlinks in the source, like shutil.copytree does
+            if os.path.isdir(source_path):
+                self._copy_directory(source_path, destination_path)
+            else:
+                self._copy_file(source_path, destination_path)
+        shutil.copystat(source, destination)
 
     def _differs(self, source: str, destination: str) -> bool:
         """
@@ -605,13 +652,23 @@ class Link(Plugin):
             self._log.action(f"Would remove {name}")
             return True
         try:
-            if os.path.islink(path) or not os.path.isdir(path):
-                os.remove(path)
-            else:
-                shutil.rmtree(path)
+            self._remove_path(path)
         except OSError as e:
             self._log.warning(f"Failed to remove {name}")
             self._log.debug(f"OSError: {e!s}")
             return False
         self._log.action(f"Removing {name}")
         return True
+
+    def _remove_path(self, path: str) -> None:
+        """
+        Removes the symlink, file, or directory at path, if there is one. A
+        symlink is removed, not followed.
+        """
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path)
+        elif os.path.lexists(path):
+            if sys.platform == "win32" and not os.path.islink(path):
+                # Windows doesn't remove a read-only file
+                os.chmod(path, stat.S_IWRITE)
+            os.remove(path)

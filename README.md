@@ -194,8 +194,9 @@ With `type: copy`, Dotbot copies the target instead of linking it. This is usefu
 - If the copy doesn't exist, Dotbot creates it.
 - If the copy exists and is the same as the target, Dotbot does nothing.
 - If the copy exists and differs from the target, Dotbot keeps it, so that local changes aren't lost. With `force: true`, Dotbot updates the copy; with `backup: true`, Dotbot first moves the old copy to a backup and then copies the target.
-- Dotbot copies a directory file by file, and keeps files that exist only in the copy.
+- Dotbot copies a directory file by file, and keeps files that exist only in the copy. When Dotbot updates a copy, it replaces the symbolic links in the copy instead of writing through them.
 - If a symbolic link is where the copy should be, Dotbot replaces it only with `relink: true` or `force: true`.
+- If a file is where a directory copy should be, or a directory is where a file copy should be, Dotbot shows a warning and keeps it, unless `force: true` or `backup: true` is set.
 
 The `relative` and `canonicalize` options have no effect on copies.
 

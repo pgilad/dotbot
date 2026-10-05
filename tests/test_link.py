@@ -2182,20 +2182,146 @@ def test_link_copy_directory(
         assert file.read() == "cherry"
 
 
-def test_link_copy_replaces_directory_with_force(
-    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+@pytest.mark.parametrize("option", ["force", "backup"])
+def test_link_copy_replaces_directory_with_force_or_backup(
+    option: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
 ) -> None:
-    """Verify that type: copy with force replaces a directory with a file."""
+    """Verify that type: copy with force or backup replaces a directory with a file."""
 
     dotfiles.write("f", "apple")
     os.makedirs(os.path.join(home, ".f"))
     dotfiles.write_config(
-        [{"link": {"~/.f": {"path": "f", "type": "copy", "force": True}}}]
+        [{"link": {"~/.f": {"path": "f", "type": "copy", option: True}}}]
     )
     run_dotbot()
 
     with open(os.path.join(home, ".f")) as file:
         assert file.read() == "apple"
+    backups = [name for name in os.listdir(home) if ".dotbot-backup." in name]
+    assert len(backups) == (1 if option == "backup" else 0)
+
+
+@pytest.mark.parametrize("target_is_directory", [False, True])
+def test_link_copy_fails_for_other_type(
+    target_is_directory: bool,  # noqa: FBT001
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that type: copy fails if a file is where a directory copy should be.
+
+    The same is true for a directory where a file copy should be.
+    """
+
+    if target_is_directory:
+        dotfiles.write("x/a", "apple")
+        with open(os.path.join(home, "x"), "w") as file:
+            file.write("pear")
+        expected = "already exists but is a file, not a directory"
+    else:
+        dotfiles.write("x", "apple")
+        os.makedirs(os.path.join(home, "x"))
+        expected = "already exists but is a directory, not a file"
+    dotfiles.write_config([{"link": {"~/x": {"path": "x", "type": "copy"}}}])
+    with pytest.raises(SystemExit):
+        run_dotbot()
+
+    assert os.path.isdir(os.path.join(home, "x")) is not target_is_directory
+    assert f"{os.path.join('~', 'x')} {expected}" in capfd.readouterr().err
+
+
+def test_link_copy_replaces_symlinks_in_copy(
+    root: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that updating a copy replaces the symlinks in it.
+
+    Following a symlink would change a file outside of the copy.
+    """
+
+    dotfiles.write("d/a", "apple")
+    dotfiles.write("d/sub/b", "banana")
+    with open(os.path.join(root, "outside"), "w") as file:
+        file.write("secret")
+    os.makedirs(os.path.join(root, "outside-directory"))
+    os.makedirs(os.path.join(home, "d"))
+    os.symlink(os.path.join(root, "outside"), os.path.join(home, "d", "a"))
+    os.symlink(
+        os.path.join(root, "outside-directory"),
+        os.path.join(home, "d", "sub"),
+        target_is_directory=True,
+    )
+    dotfiles.write_config(
+        [{"link": {"~/d": {"path": "d", "type": "copy", "force": True}}}]
+    )
+    run_dotbot()
+
+    assert not os.path.islink(os.path.join(home, "d", "a"))
+    assert not os.path.islink(os.path.join(home, "d", "sub"))
+    with open(os.path.join(home, "d", "a")) as file:
+        assert file.read() == "apple"
+    with open(os.path.join(home, "d", "sub", "b")) as file:
+        assert file.read() == "banana"
+    with open(os.path.join(root, "outside")) as file:
+        assert file.read() == "secret"
+    assert os.listdir(os.path.join(root, "outside-directory")) == []
+
+
+@pytest.mark.parametrize("in_directory", [False, True])
+def test_link_copy_updates_read_only_copy(
+    in_directory: bool,  # noqa: FBT001
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that force updates the copy of a read-only file.
+
+    The copy gets the read-only mode of the target, so it can't be overwritten.
+    """
+
+    name = "d" if in_directory else "f"
+    path = os.path.join("d", "f") if in_directory else "f"
+    target = os.path.join(dotfiles.directory, path)
+    dotfiles.write(path, "apple")
+    os.chmod(target, 0o444)
+    dotfiles.write_config(
+        [{"link": {f"~/{name}": {"path": name, "type": "copy", "force": True}}}]
+    )
+    run_dotbot()
+    os.chmod(target, 0o644)
+    dotfiles.write(path, "banana")
+    os.chmod(target, 0o444)
+    run_dotbot()
+
+    with open(os.path.join(home, path)) as file:
+        assert file.read() == "banana"
+
+
+def test_link_copy_fails_if_comparison_fails(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a copy that can't be compared fails, and later links are set up."""
+
+    dotfiles.write("a", "apple")
+    dotfiles.write("b", "banana")
+    with open(os.path.join(home, "a"), "w") as file:
+        file.write("pear")
+    dotfiles.write_config(
+        [{"link": {"~/a": {"path": "a", "type": "copy"}, "~/b": "b"}}]
+    )
+    with (
+        patch("filecmp.cmp", side_effect=PermissionError(13, "Permission denied")),
+        pytest.raises(SystemExit),
+    ):
+        run_dotbot()
+
+    with open(os.path.join(home, "a")) as file:
+        assert file.read() == "pear"
+    assert os.path.islink(os.path.join(home, "b"))
+    assert f"Failed to compare {os.path.join('~', 'a')}" in capfd.readouterr().err
 
 
 def test_link_copy_glob(
