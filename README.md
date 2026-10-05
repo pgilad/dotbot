@@ -149,7 +149,7 @@ Most Dotbot commands support both a simplified and extended syntax, and they can
 
 ### Link
 
-Link commands create symbolic links at specified locations that point to files in your dotfiles repository. This allows you to keep your configuration files in version control while having them appear where applications expect to find them. Symlinks are created by default, but hardlinks are also supported. If desired, items can be specified to be forcibly linked, overwriting existing files if necessary. Environment variables in paths are automatically expanded; if a variable is undefined, Dotbot shows a warning and uses the path as written.
+Link commands create symbolic links at specified locations that point to files in your dotfiles repository. This allows you to keep your configuration files in version control while having them appear where applications expect to find them. Symlinks are created by default, but hardlinks and copies are also supported. If desired, items can be specified to be forcibly linked, overwriting existing files if necessary. Environment variables in paths are automatically expanded; if a variable is undefined, Dotbot shows a warning and uses the path as written.
 
 #### Format
 
@@ -160,7 +160,7 @@ Link commands support an optional extended configuration. In this type of config
 | Parameter | Explanation |
 | --- | --- |
 | `path` | The target for the link (file in dotfiles directory), the same as in the shortcut syntax (default: null, automatic (see below)) |
-| `type` | The type of link to create. If specified, must be either `symlink` or `hardlink`. (default: `symlink`) |
+| `type` | The type of link to create. If specified, must be `symlink`, `hardlink`, or `copy` (see [copies](#copies)). (default: `symlink`) |
 | `create` | When true, create parent directories to the link as needed. (default: false) |
 | `relink` | Removes the old link if it's a symlink (default: false) |
 | `force` | Force removes the old link, file or folder, and forces a new link (default: false) |
@@ -186,6 +186,30 @@ When `glob: true`, Dotbot uses [glob.glob](https://docs.python.org/3/library/glo
 However, due to the design of `glob.glob`, using a glob pattern such as `config/*`, will **not** match items that begin with `.`. To specifically capture items that being with `.`, you will need to include the `.` in the pattern, like this: `config/.*`.
 
 When using glob with the `exclude:` option, the paths in the exclude paths should be relative to the base directory, same as the glob pattern itself. For example, if a glob pattern `vim/*` matches directories `vim/autoload`, `vim/ftdetect`, `vim/ftplugin`, and `vim/spell`, and you want to ignore the spell directory, then you should use `exclude: ["vim/spell"]` (not just `"spell"`).
+
+#### Copies
+
+With `type: copy`, Dotbot copies the target instead of linking it. This is useful for programs that don't work with symbolic links, and for files that you want to start from a template and then change locally.
+
+- If the copy doesn't exist, Dotbot creates it.
+- If the copy exists and is the same as the target, Dotbot does nothing.
+- If the copy exists and differs from the target, Dotbot keeps it, so that local changes aren't lost. With `force: true`, Dotbot updates the copy; with `backup: true`, Dotbot first moves the old copy to a backup and then copies the target.
+- Dotbot copies a directory file by file, and keeps files that exist only in the copy.
+- If a symbolic link is where the copy should be, Dotbot replaces it only with `relink: true` or `force: true`.
+
+The `relative` and `canonicalize` options have no effect on copies.
+
+```yaml
+- link:
+    ~/.gitconfig.local:
+      type: copy  # copy it once, then keep local changes
+      path: git/gitconfig.local.template
+    ~/Library/KeyBindings/DefaultKeyBinding.dict:
+      type: copy
+      force: true  # keep the copy the same as the target
+      create: true
+      path: macos/DefaultKeyBinding.dict
+```
 
 #### Example
 

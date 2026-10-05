@@ -1,3 +1,4 @@
+import filecmp
 import glob
 import os
 import shutil
@@ -12,7 +13,7 @@ from dotbot.util.common import normslash, undefined_variable, unknown_options
 
 class Link(Plugin):
     """
-    Symbolically links dotfiles.
+    Symbolically links (or hardlinks, or copies) dotfiles.
     """
 
     supports_dry_run = True
@@ -36,6 +37,7 @@ class Link(Plugin):
             "type",
         }
     )
+    _types = frozenset({"symlink", "hardlink", "copy"})
 
     def can_handle(self, directive: str) -> bool:
         return directive == self._directive
@@ -54,7 +56,7 @@ class Link(Plugin):
 
         # Validate the default link type before looping.
         link_type = defaults.get("type", "symlink")
-        if link_type not in {"symlink", "hardlink"}:
+        if link_type not in self._types:
             self._log.warning(f"The default link type is not recognized: '{link_type}'")
             return False
 
@@ -85,7 +87,7 @@ class Link(Plugin):
                     "canonicalize", target.get("canonicalize-path", canonical_path)
                 )
                 link_type = target.get("type", link_type)
-                if link_type not in {"symlink", "hardlink"}:
+                if link_type not in self._types:
                     msg = f"The link type is not recognized: '{link_type}'"
                     self._log.warning(msg)
                     success = False
@@ -134,6 +136,17 @@ class Link(Plugin):
                     glob_link_name = os.path.join(link_name, glob_item)
                     if create:
                         success &= self._create(glob_link_name)
+                    if link_type == "copy":
+                        success &= self._copy(
+                            glob_full_item,
+                            glob_link_name,
+                            canonical_path=canonical_path,
+                            ignore_missing=ignore_missing,
+                            force=force,
+                            relink=relink,
+                            backup=backup,
+                        )
+                        continue
                     did_backup = False
                     did_delete = False
                     if backup:
@@ -169,6 +182,17 @@ class Link(Plugin):
                     # want to remove the original (this is tested by test_link_force_leaves_when_nonexistent)
                     success = False
                     self._log.warning(f"Nonexistent target {link_name} -> {path}")
+                    continue
+                if link_type == "copy":
+                    success &= self._copy(
+                        path,
+                        link_name,
+                        canonical_path=canonical_path,
+                        ignore_missing=ignore_missing,
+                        force=force,
+                        relink=relink,
+                        backup=backup,
+                    )
                     continue
                 did_backup = False
                 did_delete = False
@@ -465,3 +489,129 @@ class Link(Plugin):
             f"{link_name} already exists but is a regular file or directory"
         )
         return False
+
+    def _copy(
+        self,
+        target: str,
+        link_name: str,
+        *,
+        canonical_path: bool,
+        ignore_missing: bool,
+        force: bool,
+        relink: bool,
+        backup: bool,
+    ) -> bool:
+        """
+        Copies target to link_name.
+
+        An existing copy that is the same as the target is left as it is. A
+        copy that differs is also left as it is, because it can have local
+        changes, unless force or backup is set: then the copy is updated (after
+        a backup moves the old copy away). A directory is copied file by file,
+        and files that are only in the copy are kept. A symlink at link_name is
+        replaced only if relink or force is set.
+
+        Returns true if link_name is a copy of target at the end.
+        """
+
+        source = os.path.join(
+            self._context.base_directory(canonical_path=canonical_path), target
+        )
+        destination = os.path.abspath(os.path.expanduser(link_name))
+        link_name = os.path.normpath(link_name)
+        if not os.path.exists(source):
+            if ignore_missing:
+                self._log.info(
+                    f"Nothing to copy, nonexistent target {link_name} -> {source}"
+                )
+                return True
+            self._log.warning(f"Nonexistent target {link_name} -> {source}")
+            return False
+
+        exists = os.path.lexists(destination)
+        if exists and os.path.islink(destination):
+            if not (relink or force):
+                self._log.warning(
+                    f"{link_name} already exists but is a symbolic link, not a copy"
+                )
+                return False
+            if not self._remove(destination, link_name):
+                return False
+            exists = False
+        if exists and not self._differs(source, destination):
+            self._log.info(f"Copy exists {link_name} -> {source}")
+            return True
+        if exists and not (force or backup):
+            self._log.info(f"Copy {link_name} differs from {source}, keeping it")
+            return True
+        if exists and backup:
+            _, backup_success = self._backup(link_name)
+            if not backup_success:
+                return False
+            exists = False
+        if exists and os.path.isdir(source) != os.path.isdir(destination):
+            # a file can't be copied over a directory, or the other way around
+            if not self._remove(destination, link_name):
+                return False
+            exists = False
+
+        verb = "update" if exists else "create"
+        if self._context.dry_run():
+            self._log.action(f"Would {verb} copy {link_name} -> {source}")
+            return True
+        try:
+            if os.path.isdir(source):
+                shutil.copytree(source, destination, dirs_exist_ok=True)
+            else:
+                shutil.copy2(source, destination)
+        except OSError as e:
+            self._log.warning(f"Copying failed {link_name} -> {source}")
+            self._log.debug(f"OSError: {e!s}")
+            return False
+        self._log.action(
+            f"{'Updating' if exists else 'Creating'} copy {link_name} -> {source}"
+        )
+        return True
+
+    def _differs(self, source: str, destination: str) -> bool:
+        """
+        Returns true if a file in source is missing from destination or has
+        different contents. Files that are only in destination don't count.
+        """
+        if not os.path.isdir(source):
+            return not os.path.isfile(destination) or not filecmp.cmp(
+                source, destination, shallow=False
+            )
+        if not os.path.isdir(destination):
+            return True
+        # follow symlinks, like shutil.copytree does
+        for directory, _, files in os.walk(source, followlinks=True):
+            for name in files:
+                source_file = os.path.join(directory, name)
+                destination_file = os.path.join(
+                    destination, os.path.relpath(source_file, source)
+                )
+                if not os.path.isfile(destination_file) or not filecmp.cmp(
+                    source_file, destination_file, shallow=False
+                ):
+                    return True
+        return False
+
+    def _remove(self, path: str, name: str) -> bool:
+        """
+        Removes a symlink, file, or directory. Returns true on success.
+        """
+        if self._context.dry_run():
+            self._log.action(f"Would remove {name}")
+            return True
+        try:
+            if os.path.islink(path) or not os.path.isdir(path):
+                os.remove(path)
+            else:
+                shutil.rmtree(path)
+        except OSError as e:
+            self._log.warning(f"Failed to remove {name}")
+            self._log.debug(f"OSError: {e!s}")
+            return False
+        self._log.action(f"Removing {name}")
+        return True

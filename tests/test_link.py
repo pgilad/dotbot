@@ -2057,3 +2057,227 @@ def test_link_glob_no_match_warns(
     stderr = capfd.readouterr().err
     assert f"No files match {os.path.join('~', '.config', 'foo')}" in stderr
     assert "bar" not in stderr
+
+
+def test_link_copy(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that type: copy copies a file and its mode, instead of linking it."""
+
+    dotfiles.write("f", "apple")
+    os.chmod(os.path.join(dotfiles.directory, "f"), 0o755)
+    dotfiles.write_config([{"link": {"~/.f": {"path": "f", "type": "copy"}}}])
+    run_dotbot()
+
+    copy = os.path.join(home, ".f")
+    assert not os.path.islink(copy)
+    with open(copy) as file:
+        assert file.read() == "apple"
+    if sys.platform != "win32":
+        assert stat.S_IMODE(os.stat(copy).st_mode) == 0o755
+    # a copy, not a hardlink: changing it doesn't change the target
+    with open(copy, "w") as file:
+        file.write("cherry")
+    with open(os.path.join(dotfiles.directory, "f")) as file:
+        assert file.read() == "apple"
+
+
+@pytest.mark.parametrize(
+    ("options", "existing", "expected", "backup"),
+    [
+        pytest.param({}, "apple", "apple", None, id="same"),
+        pytest.param({}, "pear", "pear", None, id="local changes are kept"),
+        pytest.param({"force": True}, "pear", "apple", None, id="force"),
+        pytest.param({"backup": True}, "pear", "apple", "pear", id="backup"),
+        pytest.param({"backup": True}, "apple", "apple", None, id="no backup if same"),
+    ],
+)
+def test_link_copy_existing(
+    options: dict[str, Any],
+    existing: str,
+    expected: str,
+    backup: str | None,
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify how type: copy handles a file that already exists."""
+
+    dotfiles.write("f", "apple")
+    with open(os.path.join(home, ".f"), "w") as file:
+        file.write(existing)
+    dotfiles.write_config(
+        [{"link": {"~/.f": {"path": "f", "type": "copy", **options}}}]
+    )
+    run_dotbot()
+
+    with open(os.path.join(home, ".f")) as file:
+        assert file.read() == expected
+    backups = [name for name in os.listdir(home) if ".dotbot-backup." in name]
+    if backup is None:
+        assert backups == []
+    else:
+        assert len(backups) == 1
+        with open(os.path.join(home, backups[0])) as file:
+            assert file.read() == backup
+
+
+@pytest.mark.parametrize("relink", [False, True])
+def test_link_copy_replaces_symlink_only_with_relink(
+    relink: bool,  # noqa: FBT001
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that type: copy replaces a symlink only if relink is set."""
+
+    dotfiles.write("f", "apple")
+    os.symlink(os.path.join(dotfiles.directory, "f"), os.path.join(home, ".f"))
+    dotfiles.write_config(
+        [{"link": {"~/.f": {"path": "f", "type": "copy", "relink": relink}}}]
+    )
+    if relink:
+        run_dotbot()
+    else:
+        with pytest.raises(SystemExit):
+            run_dotbot()
+
+    assert os.path.islink(os.path.join(home, ".f")) is not relink
+    with open(os.path.join(home, ".f")) as file:
+        assert file.read() == "apple"
+    # the symlink pointed at the target, which must still exist
+    with open(os.path.join(dotfiles.directory, "f")) as file:
+        assert file.read() == "apple"
+
+
+def test_link_copy_directory(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that type: copy copies a directory file by file.
+
+    With force, a changed file is updated, and a file that is only in the copy
+    is kept.
+    """
+
+    dotfiles.write("d/a", "apple")
+    dotfiles.write("d/sub/b", "banana")
+    dotfiles.write_config(
+        [{"link": {"~/d": {"path": "d", "type": "copy", "force": True}}}]
+    )
+    run_dotbot()
+
+    assert not os.path.islink(os.path.join(home, "d"))
+    with open(os.path.join(home, "d", "sub", "b")) as file:
+        assert file.read() == "banana"
+
+    with open(os.path.join(home, "d", "a"), "w") as file:
+        file.write("pear")
+    with open(os.path.join(home, "d", "extra"), "w") as file:
+        file.write("cherry")
+    run_dotbot()
+
+    with open(os.path.join(home, "d", "a")) as file:
+        assert file.read() == "apple"
+    with open(os.path.join(home, "d", "extra")) as file:
+        assert file.read() == "cherry"
+
+
+def test_link_copy_replaces_directory_with_force(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that type: copy with force replaces a directory with a file."""
+
+    dotfiles.write("f", "apple")
+    os.makedirs(os.path.join(home, ".f"))
+    dotfiles.write_config(
+        [{"link": {"~/.f": {"path": "f", "type": "copy", "force": True}}}]
+    )
+    run_dotbot()
+
+    with open(os.path.join(home, ".f")) as file:
+        assert file.read() == "apple"
+
+
+def test_link_copy_glob(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that type: copy works with glob."""
+
+    dotfiles.write("conf/a", "apple")
+    dotfiles.write("conf/b", "banana")
+    dotfiles.write_config(
+        [
+            {
+                "link": {
+                    "~/.conf": {
+                        "path": "conf/*",
+                        "glob": True,
+                        "create": True,
+                        "type": "copy",
+                    }
+                }
+            }
+        ]
+    )
+    run_dotbot()
+
+    for name, content in [("a", "apple"), ("b", "banana")]:
+        assert not os.path.islink(os.path.join(home, ".conf", name))
+        with open(os.path.join(home, ".conf", name)) as file:
+            assert file.read() == content
+        # a copy, not a hardlink: changing it doesn't change the target
+        with open(os.path.join(home, ".conf", name), "w") as file:
+            file.write("cherry")
+        with open(os.path.join(dotfiles.directory, "conf", name)) as file:
+            assert file.read() == content
+
+
+def test_link_copy_ignore_missing(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that type: copy with ignore-missing skips a missing target."""
+
+    dotfiles.write_config(
+        [{"link": {"~/.f": {"path": "f", "type": "copy", "ignore-missing": True}}}]
+    )
+    run_dotbot()
+
+    assert not os.path.lexists(os.path.join(home, ".f"))
+
+
+def test_link_copy_dry_run(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that type: copy doesn't copy anything during a dry run."""
+
+    dotfiles.write("f", "apple")
+    dotfiles.write("g", "banana")
+    with open(os.path.join(home, ".g"), "w") as file:
+        file.write("pear")
+    dotfiles.write_config(
+        [
+            {
+                "link": {
+                    "~/.f": {"path": "f", "type": "copy"},
+                    "~/.g": {"path": "g", "type": "copy", "force": True},
+                }
+            }
+        ]
+    )
+    run_dotbot("-n")
+
+    assert not os.path.lexists(os.path.join(home, ".f"))
+    with open(os.path.join(home, ".g")) as file:
+        assert file.read() == "pear"
+    lines = [line.strip() for line in capfd.readouterr().out.splitlines()]
+    assert (
+        f"Would create copy {os.path.join('~', '.f')} -> {os.path.join(dotfiles.directory, 'f')}"
+        in lines
+    )
+    assert (
+        f"Would update copy {os.path.join('~', '.g')} -> {os.path.join(dotfiles.directory, 'g')}"
+        in lines
+    )
