@@ -44,7 +44,24 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+      # the changelog has an entry for each minor version (v2.0 for v2.0.0), so
+      # a patch release gets only the generated notes
+      - name: Get the release notes from the changelog
+        run: |
+          case "$GITHUB_REF_NAME" in
+            *.0) version="${GITHUB_REF_NAME%.0}" ;;
+            *) version="" ;;
+          esac
+          awk -v entry="- $version" '
+            $0 == entry { found = 1; next }
+            found && /^- / { exit }
+            found { sub(/^    /, ""); print }
+          ' CHANGELOG.md > release-notes.md
+          cat release-notes.md
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
+          # added after the body
           generate_release_notes: true
