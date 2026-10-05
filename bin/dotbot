@@ -17,7 +17,7 @@ for python in python3 python; do
   fi
 done
 
-uv_version=0.12.21
+uv_version=0.12.23
 uv=$(command -v uv 2>/dev/null)
 if [ -z "$uv" ]; then
   cache_directory="${XDG_CACHE_HOME:-$HOME/.cache}/dotbot"
@@ -25,10 +25,10 @@ if [ -z "$uv" ]; then
   uv="$uv_directory/uv"
   if [ ! -x "$uv" ]; then
     case "$(uname -s)-$(uname -m)" in
-      Darwin-arm64) target=aarch64-apple-darwin sha256=b88bda573e566ef9bced66b155fe0408626fbbc053aee1c30ba686f0728c9447 ;;
-      Darwin-x86_64) target=x86_64-apple-darwin sha256=2b336763b396ec6afa20c5a8b083538ca7402445b868311979d740a4344c17d8 ;;
-      Linux-aarch64 | Linux-arm64) target=aarch64-unknown-linux-musl sha256=67389a674e62adffa5a395d9a3b80688731c4aa7b33a6def3e62d00f7fec821f ;;
-      Linux-x86_64) target=x86_64-unknown-linux-musl sha256=d69d543a55ec9cdf9d3d9f2648b0a161847e3dbddc477e3be6b5813a6d46f639 ;;
+      Darwin-arm64) target=aarch64-apple-darwin sha256=50487ae565ccd96e499056b4674d438f4c53170202617b4c759defe0c6a1b544 ;;
+      Darwin-x86_64) target=x86_64-apple-darwin sha256=960da44cb4b73685206ddd250b19e0a117fa41095710c1038f081f5cb613efb4 ;;
+      Linux-aarch64 | Linux-arm64) target=aarch64-unknown-linux-musl sha256=b536543cc4d50661986b165c76ee8aa9056e4fa332edcd153ff2e98760f9359b ;;
+      Linux-x86_64) target=x86_64-unknown-linux-musl sha256=1cff8783850e794470aadb73f54b749542a511fc57b0ce6468b64bd3852e0ade ;;
       *)
         >&2 echo "error: cannot find Python 3.14+ or uv; install one of them"
         exit 1

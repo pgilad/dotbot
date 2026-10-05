@@ -8,7 +8,7 @@
 # when it is redirected, so the "Stop" preference of the caller cannot be used
 $ErrorActionPreference = "Continue"
 
-$UV_VERSION = "0.12.21"
+$UV_VERSION = "0.12.23"
 $DOTBOT = Join-Path $PSScriptRoot -ChildPath "dotbot"
 
 function Stop-Dotbot($Message) {
@@ -35,8 +35,8 @@ if (-not $UV) {
     if (-not (Test-Path $UV)) {
         $ARCH = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
         switch ($ARCH) {
-            "AMD64" { $TARGET = "x86_64-pc-windows-msvc"; $SHA256 = "5d223efa0bf00208c3853246af09420419dfbd352536aa6bb8163d6170e23890" }
-            "ARM64" { $TARGET = "aarch64-pc-windows-msvc"; $SHA256 = "93ed53b94e9cec000cacdfd18ca67bc4cb2b6a5f5ec041edd7f2a3dae365ce79" }
+            "AMD64" { $TARGET = "x86_64-pc-windows-msvc"; $SHA256 = "75d05de6762778c31ee183398de7dd15093fad0ed90b1f236d8205ea5ec00c90" }
+            "ARM64" { $TARGET = "aarch64-pc-windows-msvc"; $SHA256 = "13294e232ececbe709c06b74e6ced06f2a225ea5591476685362f22be56a50d5" }
             default { Stop-Dotbot "cannot find Python 3.14+ or uv; install one of them" }
         }
         $URL = "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$TARGET.zip"
