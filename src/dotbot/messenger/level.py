@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Any
 
 
 class Level(Enum):
@@ -11,22 +10,22 @@ class Level(Enum):
     WARNING = 30
     ERROR = 40
 
-    def __lt__(self, other: Any) -> bool:
+    def __lt__(self, other: object) -> bool:
         if not isinstance(other, Level):
             return NotImplemented
         return self.value < other.value
 
-    def __le__(self, other: Any) -> bool:
+    def __le__(self, other: object) -> bool:
         if not isinstance(other, Level):
             return NotImplemented
         return self.value <= other.value
 
-    def __gt__(self, other: Any) -> bool:
+    def __gt__(self, other: object) -> bool:
         if not isinstance(other, Level):
             return NotImplemented
         return self.value > other.value
 
-    def __ge__(self, other: Any) -> bool:
+    def __ge__(self, other: object) -> bool:
         if not isinstance(other, Level):
             return NotImplemented
         return self.value >= other.value

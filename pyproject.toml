@@ -75,8 +75,12 @@ xml = "coverage xml"
 
 [tool.mypy]
 strict = true
+# check against the minimum supported version, so newer APIs are reported
+python_version = "3.14"
 
 [tool.ruff]
 extend-exclude = [
   "lib/*.py"
 ]
+# keep the syntax up to date with the minimum supported version (pyupgrade)
+lint.extend-select = ["UP"]

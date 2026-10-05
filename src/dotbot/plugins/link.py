@@ -250,21 +250,21 @@ class Link(Plugin):
         found = [os.path.normpath(p) for p in found]
         # if using recursive glob (`**`), filter results to return only files:
         if "**" in path and not path.endswith(str(os.sep)):
-            self._log.debug("Excluding directories from recursive glob: " + str(path))
+            self._log.debug(f"Excluding directories from recursive glob: {path}")
             found = [f for f in found if os.path.isfile(f)]
         # return matched results
         return found
 
     def _create_glob_results(self, path: str, exclude_paths: list[str]) -> list[str]:
-        self._log.debug("Globbing with pattern: " + str(path))
+        self._log.debug(f"Globbing with pattern: {path}")
         include = self._glob(path)
-        self._log.debug("Glob found : " + str(include))
+        self._log.debug(f"Glob found : {include}")
         # filter out any paths matching the exclude globs:
         exclude = []
         for expat in exclude_paths:
-            self._log.debug("Excluding globs with pattern: " + str(expat))
+            self._log.debug(f"Excluding globs with pattern: {expat}")
             exclude.extend(self._glob(expat))
-        self._log.debug("Excluded globs from '" + path + "': " + str(exclude))
+        self._log.debug(f"Excluded globs from '{path}': {exclude}")
         ret = set(include) - set(exclude)
         return list(ret)
 

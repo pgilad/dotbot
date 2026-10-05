@@ -1,4 +1,5 @@
 import sys
+from warnings import deprecated
 
 from dotbot.messenger.color import Color
 from dotbot.messenger.level import Level
@@ -34,8 +35,8 @@ class Messenger(metaclass=Singleton):
     def info(self, message: str) -> None:
         self.log(Level.INFO, message)
 
+    @deprecated("Use info() or action() instead")
     def lowinfo(self, message: str) -> None:
-        """Deprecated: use info() or action() instead."""
         self.info(message)
 
     def warning(self, message: str) -> None:
