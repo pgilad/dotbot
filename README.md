@@ -67,7 +67,7 @@ cp dotbot/tools/hg-subrepo/install .
 
 If you are using PowerShell instead of a POSIX shell, you can use the provided `install.ps1` script instead of `install`. On Windows, Dotbot requires that your account is [allowed to create symbolic links][windows-symlinks].
 
-Dotbot requires Python 3.14+, but you don't need to install it yourself. The install script uses the `python3` or `python` on your PATH if it is new enough. Otherwise, it uses [uv] to find a Python 3.14+ or to download one. If uv isn't installed either, the script first downloads a pinned version of uv, verifies its checksum, and keeps it in `$XDG_CACHE_HOME/dotbot` (`~/.cache/dotbot` by default, or `%LOCALAPPDATA%\dotbot` on Windows). A Python that uv downloads is kept in uv's own data directory, and it doesn't change the `python3` on your PATH.
+Dotbot requires Python 3.14+, but you don't need to install it yourself. The install script uses the `python3` or `python` on your PATH if it is new enough. Otherwise, it uses [uv] to find a Python 3.14+ or to download one. If uv isn't installed either, or if it can't install Python 3.14+ (for example, because it is too old), the script first downloads a pinned version of uv, verifies its checksum, and keeps it in `$XDG_CACHE_HOME/dotbot` (`~/.cache/dotbot` by default, or `%LOCALAPPDATA%\dotbot` on Windows). A Python that uv downloads is kept in uv's own data directory, and it doesn't change the `python3` on your PATH.
 
 To get started, you just need to fill in the `install.conf.yaml` and Dotbot will take care of the rest. To help you get started we have [an example](#full-example) config file as well as [configuration documentation](#configuration) for the accepted parameters.
 

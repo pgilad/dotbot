@@ -69,7 +69,7 @@ You can use [`hatch publish`][hatch-publish] to publish build artifacts to [PyPI
 
 ## Updating the pinned uv version
 
-When neither Python 3.14+ nor [uv] is installed, [`bin/dotbot`][bin-dotbot] and [`bin/dotbot.ps1`][bin-dotbot-ps1] download a pinned version of uv and verify its SHA-256 checksum. To update the pin, change the version and the checksums in both scripts. You can download the checksums of a uv release with:
+When Python 3.14+ isn't installed, and [uv] isn't installed either or can't install Python 3.14+, [`bin/dotbot`][bin-dotbot] and [`bin/dotbot.ps1`][bin-dotbot-ps1] download a pinned version of uv and verify its SHA-256 checksum. To update the pin, change the version and the checksums in both scripts. You can download the checksums of a uv release with:
 
 ```bash
 gh release download <version> -R astral-sh/uv -p 'uv-*.sha256' -D uv-checksums
