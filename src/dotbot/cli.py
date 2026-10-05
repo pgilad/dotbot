@@ -1,15 +1,16 @@
 import os
 import subprocess
 import sys
+import traceback
 from argparse import SUPPRESS, ArgumentParser, RawTextHelpFormatter
-from typing import Any, List
+from typing import Any
 
 import dotbot
 from dotbot.config import ConfigReader, ReadingError
 from dotbot.dispatcher import Dispatcher, DispatchError
 from dotbot.messenger import Level, Messenger
 from dotbot.plugins import Clean, Create, Link, Shell
-from dotbot.util import module
+from dotbot.util import module, string
 
 
 def add_options(parser: ArgumentParser) -> None:
@@ -100,7 +101,7 @@ def add_options(parser: ArgumentParser) -> None:
     )
 
 
-def read_config(config_files: List[str]) -> Any:
+def read_config(config_files: list[str]) -> Any:
     reader = ConfigReader(config_files)
     return reader.get_config()
 
@@ -137,15 +138,20 @@ def main() -> None:
         elif options.no_color:
             log.use_color(False)
         else:
-            log.use_color(sys.stdout.isatty())
+            log.use_color(sys.stdout.isatty() and sys.stderr.isatty())
 
         plugins = []
         if not options.disable_built_in_plugins:
             plugins.extend([Clean, Create, Link, Shell])
-        module.load_plugins(
-            options.plugin_dirs, plugins
-        )  # note, plugin_dirs is deprecated
-        module.load_plugins(options.plugins, plugins)
+        try:
+            module.load_plugins(
+                options.plugin_dirs, plugins
+            )  # note, plugin_dirs is deprecated
+            module.load_plugins(options.plugins, plugins)
+        except Exception as e:  # noqa: BLE001
+            log.error(f"Could not load plugins:\n{string.indent_lines(str(e))}")
+            log.debug(traceback.format_exc())
+            sys.exit(1)
 
         if not options.config_file:
             log.error("No configuration file specified")

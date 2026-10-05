@@ -1,4 +1,7 @@
-from typing import Callable
+import os
+import subprocess
+import sys
+from collections.abc import Callable
 
 import pytest
 
@@ -354,3 +357,88 @@ def test_shell_dry_run(
 
     lines = capfd.readouterr().out.splitlines()
     assert any(line.strip() == "Would run command exit 1" for line in lines)
+
+
+def test_shell_ignores_login_shell(
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that commands run in /bin/sh (cmd.exe on Windows), not in $SHELL."""
+
+    monkeypatch.setenv("SHELL", os.path.join(dotfiles.directory, "nonexistent"))
+    dotfiles.write_config([{"shell": [{"command": "echo apple", "stdout": True}]}])
+    run_dotbot()
+
+    lines = capfd.readouterr().out.splitlines()
+    assert any(line.startswith("apple") for line in lines)
+
+
+@pytest.mark.parametrize("in_defaults", [False, True])
+def test_shell_executable(
+    capfd: pytest.CaptureFixture[str],
+    in_defaults: bool,  # noqa: FBT001
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that the executable option runs commands as `executable -c command`."""
+
+    command = {"command": "print('banana')", "stdout": True}
+    config: list[dict[str, object]] = [{"shell": [command]}]
+    if in_defaults:
+        config.insert(0, {"defaults": {"shell": {"executable": sys.executable}}})
+    else:
+        command["executable"] = sys.executable
+    dotfiles.write_config(config)
+    run_dotbot()
+
+    lines = capfd.readouterr().out.splitlines()
+    assert any(line.startswith("banana") for line in lines)
+
+
+def test_shell_exception_is_reported(
+    capfd: pytest.CaptureFixture[str],
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that an exception in a plugin is reported with its message.
+
+    The action must not be reported as not handled.
+    """
+
+    dotfiles.write_config([{"shell": [{"description": "no command"}]}])
+    with pytest.raises(SystemExit):
+        run_dotbot()
+
+    stderr = capfd.readouterr().err
+    assert (
+        "An error was encountered while executing action shell: KeyError: 'command'"
+        in stderr
+    )
+    assert "not handled" not in stderr
+
+
+def test_shell_output_order_with_pipe(home: str, dotfiles: Dotfiles) -> None:
+    """Verify that log messages and command output stay in order in a pipe."""
+
+    _ = home
+    dotfiles.write_config(
+        [
+            {
+                "shell": [
+                    {"command": "echo apple", "stdout": True},
+                    {"command": "echo banana", "stdout": True},
+                ]
+            }
+        ]
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "dotbot", "-c", dotfiles.config_filename],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    lines = [line.strip() for line in result.stdout.splitlines()]
+    assert lines == ["echo apple", "apple", "echo banana", "banana"]

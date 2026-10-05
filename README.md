@@ -65,7 +65,9 @@ git clone https://github.com/anishathalye/dotbot
 cp dotbot/tools/hg-subrepo/install .
 ```
 
-If you are using PowerShell instead of a POSIX shell, you can use the provided `install.ps1` script instead of `install`. On Windows, Dotbot only supports Python 3.8+, and it requires that your account is [allowed to create symbolic links][windows-symlinks].
+If you are using PowerShell instead of a POSIX shell, you can use the provided `install.ps1` script instead of `install`. On Windows, Dotbot requires that your account is [allowed to create symbolic links][windows-symlinks].
+
+Dotbot requires Python 3.14+, but you don't need to install it yourself. The install script uses the `python3` or `python` on your PATH if it is new enough. Otherwise, it uses [uv] to find a Python 3.14+ or to download one. If uv isn't installed either, the script first downloads a pinned version of uv, verifies its checksum, and keeps it in `$XDG_CACHE_HOME/dotbot` (`~/.cache/dotbot` by default, or `%LOCALAPPDATA%\dotbot` on Windows). A Python that uv downloads is kept in uv's own data directory, and it doesn't change the `python3` on your PATH.
 
 To get started, you just need to fill in the `install.conf.yaml` and Dotbot will take care of the rest. To help you get started we have [an example](#full-example) config file as well as [configuration documentation](#configuration) for the accepted parameters.
 
@@ -75,7 +77,7 @@ Setting up Dotbot as a submodule or subrepo locks it on the current version. You
 
 #### Installation as a command-line program
 
-If you prefer, instead of bundling Dotbot as a submodule with your dotfiles, you can install Dotbot from [PyPI] as a standalone command-line program. Use the tool of your choice, such as `pip` or [`uv`][uv]:
+If you prefer, instead of bundling Dotbot as a submodule with your dotfiles, you can install Dotbot from [PyPI] as a standalone command-line program. Use the tool of your choice, such as `pip` or [`uv`][uv] (which downloads Python 3.14+ if needed):
 
 ```bash
 uv tool install dotbot
@@ -147,7 +149,7 @@ Most Dotbot commands support both a simplified and extended syntax, and they can
 
 ### Link
 
-Link commands create symbolic links at specified locations that point to files in your dotfiles repository. This allows you to keep your configuration files in version control while having them appear where applications expect to find them. Symlinks are created by default, but hardlinks are also supported. If desired, items can be specified to be forcibly linked, overwriting existing files if necessary. Environment variables in paths are automatically expanded.
+Link commands create symbolic links at specified locations that point to files in your dotfiles repository. This allows you to keep your configuration files in version control while having them appear where applications expect to find them. Symlinks are created by default, but hardlinks are also supported. If desired, items can be specified to be forcibly linked, overwriting existing files if necessary. Environment variables in paths are automatically expanded; if a variable is undefined, Dotbot shows a warning and uses the path as written.
 
 #### Format
 
@@ -165,8 +167,8 @@ Link commands support an optional extended configuration. In this type of config
 | `backup` | Backup existing files/directories if they exist, creating a backup with suffix `.dotbot-backup.{timestamp}` (default: false) |
 | `relative` | When creating a symlink, use a relative path to the target. (default: false, absolute links) |
 | `canonicalize` | Resolve any symbolic links encountered in the target to symlink to the canonical path (default: true, real paths) |
-| `if` | Execute this in your `$SHELL` and only link if it is successful. |
-| `ignore-missing` | Do not fail if the target is missing and create the link anyway (default: false) |
+| `if` | Execute this with `/bin/sh` (`cmd.exe` on Windows) and only link if it is successful. |
+| `ignore-missing` | Do not fail if the target is missing and create the link anyway, and do not warn if a glob matches nothing (default: false) |
 | `glob` | Treat `path` as a glob pattern, expanding patterns referenced below, linking all *files* matched. (default: false) |
 | `exclude` | Array of glob patterns to remove from glob matches. Uses same syntax as `path`. Ignored if `glob` is `false`. (default: empty, keep all matches) |
 | `prefix` | Prepend prefix prefix to basename of each file when linked, when `glob` is `true`. (default: '') |
@@ -289,6 +291,8 @@ The `mode` parameter is treated in the same way as in Python's [os.mkdir](https:
 
 Shell commands specify shell commands to be run. Shell commands are run in the base directory (that is specified when running the installer).
 
+Shell commands are run with `/bin/sh` (`cmd.exe` on Windows), not with your login shell, so that a configuration works the same for everyone who uses it. To use a different shell, set the `executable` option (for example, in the [defaults](#defaults)), and Dotbot will run `executable -c command`.
+
 #### Format
 
 Shell commands can be specified in several different ways. The simplest way is just to specify a command as a string containing the command to be run.
@@ -305,6 +309,7 @@ Shell commands support an extended syntax as well, which provides more fine-grai
 | `stdin` | Allow a command to read from standard input (default: false) |
 | `stdout` | Show a command's output from stdout (default: false) |
 | `stderr` | Show a command's error output from stderr (default: false) |
+| `executable` | The shell that runs the command, as `executable -c command`, such as `bash` (default: `/bin/sh`, or `cmd.exe` on Windows) |
 
 Note that `quiet` controls whether the command (a string) is printed in log output, it does not control whether the output from running the command is printed (that is controlled by `stdout` / `stderr`). When a command's `stdin` / `stdout` / `stderr` is not enabled (which is the default), it's connected to `/dev/null`, disabling input and hiding output.
 

@@ -1,16 +1,16 @@
 import glob
 import importlib.util
 import os
+import sys
 from types import ModuleType
-from typing import List, Optional, Type
 
 from dotbot.plugin import Plugin
 
 # We keep references to loaded modules so they don't get garbage collected.
-loaded_modules: List[ModuleType] = []
+loaded_modules: list[ModuleType] = []
 
 
-def load(path: str) -> List[Type[Plugin]]:
+def load(path: str) -> list[type[Plugin]]:
     basename = os.path.basename(path)
     module_name, _ = os.path.splitext(basename)
     loaded_module = load_module(module_name, path)
@@ -27,18 +27,27 @@ def load(path: str) -> List[Type[Plugin]]:
 
 
 def load_module(module_name: str, path: str) -> ModuleType:
+    # Register the module in sys.modules, because some code (such as
+    # dataclasses) looks up the module of a class there. The prefix keeps a
+    # plugin file such as "copy.py" from replacing a standard library module.
+    module_name = f"_dotbot_plugin_{module_name}"
     spec = importlib.util.spec_from_file_location(module_name, path)
     if not spec or not spec.loader:
         msg = f"Unable to load module {module_name} from {path}"
         raise ImportError(msg)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        del sys.modules[module_name]
+        raise
     return module
 
 
 def load_plugins(
-    paths: List[str], plugins: Optional[List[Type[Plugin]]] = None
-) -> List[Type[Plugin]]:
+    paths: list[str], plugins: list[type[Plugin]] | None = None
+) -> list[type[Plugin]]:
     """
     Load plugins from the given paths and add them to the given list of plugins.
 

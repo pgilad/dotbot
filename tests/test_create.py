@@ -1,6 +1,6 @@
 import os
 import stat
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
@@ -90,3 +90,23 @@ def test_create_dry_run(
         f"Path exists {os.path.join(home, 'existing')}" == line.strip()
         for line in lines
     )
+
+
+def test_create_undefined_variable_warns(
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify create warns about undefined environment variables.
+
+    The path is still created with the name as written.
+    """
+
+    monkeypatch.delenv("PEAR", raising=False)
+    dotfiles.write_config([{"create": ["~/$PEAR"]}])
+    run_dotbot()
+
+    assert os.path.isdir(os.path.join(home, "$PEAR"))
+    assert "Undefined environment variable $PEAR in ~/$PEAR" in capfd.readouterr().err

@@ -11,27 +11,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-22.04", "macos-latest", "windows-latest"]
+        os: ["ubuntu-24.04", "macos-latest", "windows-latest"]
         python:
-          - "3.7"
-          - "3.8"
-          - "3.9"
-          - "3.10"
-          - "3.11"
-          - "3.12"
-          - "3.13"
           - "3.14"
-          - "pypy-3.10"
-        include:
-          - python: "3.7"
-            hatch_version: "1.16.4"
-        exclude:
-          - os: "macos-latest"
-            python: "3.7"
-          - os: "windows-latest"
-            python: "3.7"
-          - os: "windows-latest"
-            python: "pypy-3.10"
+          - "3.15"
     runs-on: ${{ matrix.os }}
     name: "Test: Python ${{ matrix.python }} on ${{ matrix.os }}"
     steps:
@@ -39,9 +22,7 @@ jobs:
         with:
           submodules: recursive
       - uses: pypa/hatch@install
-        with:
-          version: ${{ matrix.hatch_version || 'latest' }}
-      - run: hatch test -v --cover --include python=$(echo ${{ matrix.python }} | tr -d '-') tests
+      - run: hatch test -v --cover --include python=${{ matrix.python }} tests
       - run: hatch run coverage:xml
       - uses: codecov/codecov-action@v5
         with:

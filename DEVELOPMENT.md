@@ -25,7 +25,7 @@ The [`test` command][hatch-test] supports options such as `-c` for measuring tes
 Dotbot executes shell commands and interacts with the filesystem, and the tests exercise this functionality. The tests try to [insulate][dotbot-conftest] themselves from the machine, but if you prefer to run tests in an isolated container using Docker, you can do so with the following:
 
 ```bash
-docker run -it --rm -v "${PWD}:/dotbot" -w /dotbot python:3.13-bookworm /bin/bash
+docker run -it --rm -v "${PWD}:/dotbot" -w /dotbot python:3.14-trixie /bin/bash
 ```
 
 After spawning the container, install Hatch with `pip install hatch`, and then run the tests as described above.
@@ -66,6 +66,20 @@ You can use [`hatch publish`][hatch-publish] to publish build artifacts to [PyPI
 [bdist]: https://packaging.python.org/en/latest/glossary/#term-Built-Distribution
 [hatch-publish]: https://hatch.pypa.io/latest/publish/
 [pypi]: https://pypi.org/
+
+## Updating the pinned uv version
+
+When neither Python 3.14+ nor [uv] is installed, [`bin/dotbot`][bin-dotbot] and [`bin/dotbot.ps1`][bin-dotbot-ps1] download a pinned version of uv and verify its SHA-256 checksum. To update the pin, change the version and the checksums in both scripts. You can download the checksums of a uv release with:
+
+```bash
+gh release download <version> -R astral-sh/uv -p 'uv-*.sha256' -D uv-checksums
+```
+
+The scripts use the `apple-darwin` and `unknown-linux-musl` archives (`.tar.gz`) and the `pc-windows-msvc` archives (`.zip`), for both `aarch64` and `x86_64`.
+
+[uv]: https://github.com/astral-sh/uv
+[bin-dotbot]: bin/dotbot
+[bin-dotbot-ps1]: bin/dotbot.ps1
 
 ## Continuous integration
 

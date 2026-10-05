@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 
@@ -218,3 +218,24 @@ def test_clean_dry_run_recursive(
         in line
         for line in lines
     )
+
+
+def test_clean_recursive_does_not_follow_symlinked_directories(
+    root: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify recursive clean doesn't descend into symlinked directories.
+
+    A symlinked directory can point outside of the target directory.
+    """
+
+    outside = os.path.join(root, "outside")
+    os.makedirs(outside)
+    os.symlink(
+        os.path.join(dotfiles.directory, "nowhere"), os.path.join(outside, "dead")
+    )
+    os.symlink(outside, os.path.join(home, "linked"), target_is_directory=True)
+    dotfiles.write_config([{"clean": {"~": {"recursive": True}}}])
+    run_dotbot()
+
+    assert os.path.islink(os.path.join(home, "linked"))
+    assert os.path.islink(os.path.join(outside, "dead"))

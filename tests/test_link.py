@@ -2,8 +2,9 @@ import os
 import pathlib
 import stat
 import sys
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional
+from datetime import datetime, timedelta, UTC
+from typing import Any
+from collections.abc import Callable
 from unittest.mock import patch
 
 import pytest
@@ -327,7 +328,7 @@ def test_link_backup_error_if_dest_already_exists(
 
     os.mkdir(os.path.join(home, ".dir"))
     # create fake backup directories; this test is technically timing dependent but it should work out in practice
-    now = datetime.now(timezone.utc).astimezone()
+    now = datetime.now(UTC).astimezone()
     for delta in range(10):
         timestamp = (now + timedelta(seconds=delta)).strftime("%Y%m%d-%H%M%S")
         os.mkdir(os.path.join(home, f".dir.dotbot-backup.{timestamp}"))
@@ -919,7 +920,7 @@ def test_link_glob_multi_star(
 )
 def test_link_glob_patterns(
     pattern: str,
-    expect_file: Callable[[str], Optional[str]],
+    expect_file: Callable[[str], str | None],
     home: str,
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
@@ -1420,8 +1421,8 @@ def test_target_is_not_overwritten_by_symlink_trickery(
     with pytest.raises(SystemExit):
         run_dotbot()
 
-    stdout, _ = capsys.readouterr()
-    assert "appears to be the same file" in stdout
+    _, stderr = capsys.readouterr()
+    assert "appears to be the same file" in stderr
     # Verify that the file was not overwritten.
     assert ssh_config.read_text() == "preserve me!"
 
@@ -1488,7 +1489,7 @@ def test_link_defaults_2(
     ],
 )
 def test_link_type_symlink(
-    config: List[Dict[str, Any]],
+    config: list[dict[str, Any]],
     home: str,
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
@@ -1519,7 +1520,7 @@ def test_link_type_symlink(
     ],
 )
 def test_link_type_hardlink(
-    config: List[Dict[str, Any]],
+    config: list[dict[str, Any]],
     home: str,
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
@@ -1551,7 +1552,7 @@ def test_link_type_hardlink(
 )
 def test_unknown_link_type(
     capsys: pytest.CaptureFixture[str],
-    config: List[Dict[str, Any]],
+    config: list[dict[str, Any]],
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
@@ -1560,8 +1561,8 @@ def test_unknown_link_type(
     dotfiles.write_config(config)
     with pytest.raises(SystemExit):
         run_dotbot()
-    stdout, _ = capsys.readouterr()
-    assert "link type is not recognized" in stdout
+    _, stderr = capsys.readouterr()
+    assert "link type is not recognized" in stderr
 
 
 def test_symlink_exists_when_hardlink_requested(
@@ -1587,8 +1588,8 @@ def test_symlink_exists_when_hardlink_requested(
         run_dotbot()
 
     # Verify
-    stdout, _ = capsys.readouterr()
-    assert "already exists but is a symbolic link, not a hard link" in stdout
+    _, stderr = capsys.readouterr()
+    assert "already exists but is a symbolic link, not a hard link" in stderr
 
 
 def test_hardlink_already_exists(
@@ -1634,9 +1635,9 @@ def test_broken_symlink_shows_invalid_link_message(
     with pytest.raises(SystemExit):
         run_dotbot()
 
-    stdout, _ = capsys.readouterr()
-    assert "Invalid link" in stdout
-    assert "Linking failed" not in stdout
+    _, stderr = capsys.readouterr()
+    assert "Invalid link" in stderr
+    assert "Linking failed" not in stderr
 
 
 def test_link_dry_run(
@@ -1877,8 +1878,8 @@ def test_link_error_creating_link(
     # Restore permissions to allow test cleanup.
     os.chmod(os.path.join(home, "subdir"), old_permissions)
 
-    stdout, _ = capsys.readouterr()
-    assert "Linking failed" in stdout
+    _, stderr = capsys.readouterr()
+    assert "Linking failed" in stderr
 
 
 @pytest.mark.skipif(
@@ -1921,8 +1922,8 @@ def test_link_error_creating_directory(
     # Restore permissions to allow test cleanup.
     os.chmod(os.path.join(home, "subdir"), old_permissions)
 
-    stdout, _ = capsys.readouterr()
-    assert "Failed to create directory" in stdout
+    _, stderr = capsys.readouterr()
+    assert "Failed to create directory" in stderr
 
 
 @pytest.mark.skipif(
@@ -1965,5 +1966,94 @@ def test_link_error_delete(
     # Restore permissions to allow test cleanup.
     os.chmod(os.path.join(home, "subdir"), old_permissions)
 
-    stdout, _ = capsys.readouterr()
-    assert "Failed to remove" in stdout
+    _, stderr = capsys.readouterr()
+    assert "Failed to remove" in stderr
+
+
+def test_link_dry_run_relink_regular_file(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a dry run doesn't claim that relink replaces a regular file.
+
+    Without force, relink only replaces symlinks, so the dry run must fail like
+    the real run.
+    """
+
+    dotfiles.write("f", "apple")
+    dotfiles.write_config([{"link": {"~/.f": {"path": "f", "relink": True}}}])
+    with open(os.path.join(home, ".f"), "w") as file:
+        file.write("pear")
+    with pytest.raises(SystemExit):
+        run_dotbot("-n")
+    with open(os.path.join(home, ".f")) as file:
+        assert file.read() == "pear"
+
+    output = capfd.readouterr()
+    assert "Would remove" not in output.out
+    assert "Would create" not in output.out
+    assert "already exists but is a regular file or directory" in output.err
+
+
+def test_link_undefined_variable_warns(
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify link warns about undefined environment variables.
+
+    The link is still created with the name as written, and links that fail
+    their test don't cause a warning.
+    """
+
+    monkeypatch.delenv("PEAR", raising=False)
+    dotfiles.write("h", "grape")
+    dotfiles.write_config(
+        [
+            {
+                "link": {
+                    "~/$PEAR": "h",
+                    "~/${PEAR}2": {"path": "h", "if": "exit 1"},
+                }
+            }
+        ]
+    )
+    run_dotbot()
+
+    with open(os.path.join(home, "$PEAR")) as file:
+        assert file.read() == "grape"
+    stderr = capfd.readouterr().err
+    assert "Undefined environment variable $PEAR in" in stderr
+    assert "${PEAR}" not in stderr
+
+
+def test_link_glob_no_match_warns(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a glob with no match warns, unless ignore-missing is set."""
+
+    _ = home
+    dotfiles.makedirs("foo")
+    dotfiles.write_config(
+        [
+            {"defaults": {"link": {"glob": True, "create": True}}},
+            {
+                "link": {
+                    "~/.config/foo": "foo/*",
+                    "~/.config/bar": {"path": "foo/*", "ignore-missing": True},
+                }
+            },
+        ]
+    )
+    run_dotbot()
+
+    stderr = capfd.readouterr().err
+    assert f"No files match {os.path.join('~', '.config', 'foo')}" in stderr
+    assert "bar" not in stderr

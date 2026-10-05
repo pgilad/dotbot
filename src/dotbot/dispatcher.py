@@ -1,6 +1,7 @@
 import os
+import traceback
 from argparse import Namespace
-from typing import Any, Dict, List, Optional, Type
+from typing import Any
 
 from dotbot.context import Context
 from dotbot.messenger import Messenger
@@ -13,18 +14,18 @@ from dotbot.util.module import load_plugins
 # so this is a workaround for implementing similar functionality: when
 # Dispatcher is constructed without an explicit list of plugins, _all_plugins is
 # used instead.
-_all_plugins: List[Type[Plugin]] = []  # filled in by cli.py
+_all_plugins: list[type[Plugin]] = []  # filled in by cli.py
 
 
 class Dispatcher:
     def __init__(
         self,
         base_directory: str,
-        only: Optional[List[str]] = None,
-        skip: Optional[List[str]] = None,
+        only: list[str] | None = None,
+        skip: list[str] | None = None,
         exit_on_failure: bool = False,  # noqa: FBT001, FBT002 part of established public API
-        options: Optional[Namespace] = None,
-        plugins: Optional[List[Type[Plugin]]] = None,
+        options: Namespace | None = None,
+        plugins: list[type[Plugin]] | None = None,
     ):
         # if the caller wants no plugins, the caller needs to explicitly pass in
         # plugins=[]
@@ -41,8 +42,8 @@ class Dispatcher:
     def _setup_context(
         self,
         base_directory: str,
-        options: Optional[Namespace],
-        plugins: Optional[List[Type[Plugin]]],
+        options: Namespace | None,
+        plugins: list[type[Plugin]] | None,
     ) -> None:
         path = os.path.abspath(os.path.expanduser(base_directory))
         if not os.path.exists(path):
@@ -50,14 +51,14 @@ class Dispatcher:
             raise DispatchError(msg)
         self._context = Context(path, options, plugins)
 
-    def dispatch(self, tasks: List[Dict[str, Any]]) -> bool:
+    def dispatch(self, tasks: list[dict[str, Any]]) -> bool:
         success = True
         for task in tasks:
             for action in task:
                 if (
                     (self._only is not None and action not in self._only)
                     or (self._skip is not None and action in self._skip)
-                ) and action != "defaults":
+                ) and action not in {"defaults", "plugins"}:
                     self._log.info(f"Skipping action {action}")
                     continue
                 handled = False
@@ -66,6 +67,7 @@ class Dispatcher:
                     handled = True
                     # keep going, let other plugins handle this if they want
                 if action == "plugins":
+                    plugins_success = True
                     for plugin_path in task[action]:
                         try:
                             # load the new plugins and add them to the list of plugins
@@ -79,8 +81,9 @@ class Dispatcher:
                         except Exception as err:  # noqa: BLE001
                             self._log.warning(f"Failed to load plugin '{plugin_path}'")
                             self._log.debug(str(err))
-                            success = False
-                    if not success:
+                            plugins_success = False
+                    if not plugins_success:
+                        success = False
                         self._log.error("Some plugins could not be loaded")
                         if self._exit:
                             self._log.error("Action plugins failed")
@@ -105,9 +108,12 @@ class Dispatcher:
                             handled = True
                         except Exception as err:  # noqa: BLE001
                             self._log.error(
-                                f"An error was encountered while executing action {action}"
+                                f"An error was encountered while executing action {action}: "
+                                f"{type(err).__name__}: {err}"
                             )
-                            self._log.debug(str(err))
+                            self._log.debug(traceback.format_exc())
+                            success = False
+                            handled = True
                             if self._exit:
                                 # There was an exception, exit
                                 return False

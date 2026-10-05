@@ -1,3 +1,5 @@
+import sys
+
 from dotbot.messenger.color import Color
 from dotbot.messenger.level import Level
 from dotbot.util.singleton import Singleton
@@ -16,7 +18,12 @@ class Messenger(metaclass=Singleton):
 
     def log(self, level: Level, message: str) -> None:
         if level >= self._level:
-            print(f"{self._color(level)}{message}{self._reset()}")  # noqa: T201
+            # flush, so that messages stay in order with the output of shell commands
+            print(  # noqa: T201
+                f"{self._color(level)}{self._prefix(level)}{message}{self._reset()}",
+                file=sys.stderr if level >= Level.WARNING else sys.stdout,
+                flush=True,
+            )
 
     def debug(self, message: str) -> None:
         self.log(Level.DEBUG, message)
@@ -52,6 +59,16 @@ class Messenger(metaclass=Singleton):
         if level < Level.ERROR:
             return Color.MAGENTA
         return Color.RED
+
+    def _prefix(self, level: Level) -> str:
+        """
+        Get a prefix that shows the level of a message when color is disabled.
+        """
+        if self._use_color or level < Level.WARNING:
+            return ""
+        if level < Level.ERROR:
+            return "warning: "
+        return "error: "
 
     def _reset(self) -> str:
         """

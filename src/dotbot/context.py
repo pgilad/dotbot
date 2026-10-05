@@ -1,7 +1,7 @@
 import copy
 import os
 from argparse import Namespace
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from dotbot.plugin import Plugin
@@ -15,11 +15,11 @@ class Context:
     def __init__(
         self,
         base_directory: str,
-        options: Optional[Namespace] = None,
-        plugins: "Optional[List[Type[Plugin]]]" = None,
+        options: Namespace | None = None,
+        plugins: list[type[Plugin]] | None = None,
     ):
         self._base_directory = base_directory
-        self._defaults: Dict[str, Any] = {}
+        self._defaults: dict[str, Any] = {}
         self._options = options if options is not None else Namespace()
         self._plugins = plugins
 
@@ -32,16 +32,16 @@ class Context:
             base_directory = os.path.realpath(base_directory)
         return base_directory
 
-    def set_defaults(self, defaults: Dict[str, Any]) -> None:
+    def set_defaults(self, defaults: dict[str, Any]) -> None:
         self._defaults = defaults
 
-    def defaults(self) -> Dict[str, Any]:
+    def defaults(self) -> dict[str, Any]:
         return copy.deepcopy(self._defaults)
 
     def options(self) -> Namespace:
         return copy.deepcopy(self._options)
 
-    def plugins(self) -> "Optional[List[Type[Plugin]]]":
+    def plugins(self) -> list[type[Plugin]] | None:
         # shallow copy is ok here
         return copy.copy(self._plugins)
 

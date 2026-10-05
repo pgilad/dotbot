@@ -1,9 +1,10 @@
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from dotbot.plugin import Plugin
-from dotbot.util.common import normslash
+from dotbot.util.common import normslash, unknown_options
 
 
 class Clean(Plugin):
@@ -14,6 +15,7 @@ class Clean(Plugin):
     supports_dry_run = True
 
     _directive = "clean"
+    _options = frozenset({"force", "recursive"})
 
     def can_handle(self, directive: str) -> bool:
         return directive == self._directive
@@ -27,10 +29,14 @@ class Clean(Plugin):
     def _process_clean(self, targets: Any) -> bool:
         success = True
         defaults = self._context.defaults().get(self._directive, {})
+        for key in unknown_options(defaults, self._options):
+            self._log.warning(f"Unknown option '{key}' in clean defaults")
         for target in targets:
             force = defaults.get("force", False)
             recursive = defaults.get("recursive", False)
             if isinstance(targets, dict) and isinstance(targets[target], dict):
+                for key in unknown_options(targets[target], self._options):
+                    self._log.warning(f"Unknown option '{key}' for {target}")
                 force = targets[target].get("force", force)
                 recursive = targets[target].get("recursive", recursive)
             success &= self._clean(normslash(target), force=force, recursive=recursive)
@@ -52,10 +58,11 @@ class Clean(Plugin):
             path = os.path.abspath(
                 os.path.join(os.path.expandvars(os.path.expanduser(target)), item)
             )
-            if recursive and os.path.isdir(path):
-                # isdir implies not islink -- we don't want to descend into
-                # symlinked directories. okay to do a recursive call here
-                # because depth should be fairly limited
+            if recursive and os.path.isdir(path) and not os.path.islink(path):
+                # isdir follows symlinks, so check islink too: we don't want to
+                # descend into symlinked directories, which can point outside
+                # of the target or form a loop. okay to do a recursive call
+                # here because depth should be fairly limited
                 self._clean(path, force=force, recursive=recursive)
             if not os.path.exists(path) and os.path.islink(path):
                 points_at = os.path.join(os.path.dirname(path), os.readlink(path))
@@ -77,6 +84,6 @@ class Clean(Plugin):
         """
         Returns true if the path is in the directory.
         """
-        directory = os.path.join(os.path.realpath(directory), "")
+        directory = os.path.realpath(directory)
         path = os.path.realpath(path)
-        return os.path.commonprefix([path, directory]) == directory
+        return path != directory and Path(path).is_relative_to(directory)

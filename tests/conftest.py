@@ -6,7 +6,8 @@ import shutil
 import sys
 import tempfile
 from shutil import rmtree
-from typing import Any, Callable, Generator, List, Optional
+from typing import Any
+from collections.abc import Callable, Generator
 from unittest import mock
 
 import pytest
@@ -32,10 +33,10 @@ def get_long_path(path: str) -> str:
 # On Linux, tempfile.TemporaryFile() requires unlink access.
 # This list is updated by a tempfile._mkstemp_inner() wrapper,
 # and its contents are checked by wrapped functions.
-allowed_tempfile_internal_unlink_calls: List[str] = []
+allowed_tempfile_internal_unlink_calls: list[str] = []
 
 
-def get_path_from_fd(fd: int) -> Optional[str]:
+def get_path_from_fd(fd: int) -> str | None:
     """Get the filesystem path for a file descriptor.
 
     Returns None if the path cannot be determined (e.g., on Windows or if fd is invalid).
@@ -168,7 +169,7 @@ def standardize_tmp() -> None:
 
 
 @pytest.fixture(autouse=True)
-def root(standardize_tmp: None) -> Generator[str, None, None]:
+def root(standardize_tmp: None) -> Generator[str]:
     _ = standardize_tmp
     """Create a temporary directory for the duration of each test."""
 
@@ -224,7 +225,7 @@ def root(standardize_tmp: None) -> Generator[str, None, None]:
         (shutil, "unpack_archive", 1, "extract_dir"),
     ]
 
-    patches: List[Any] = []
+    patches: list[Any] = []
     for module, function_name, arg_index, kwarg_key in functions_to_wrap:
         # Skip anything that doesn't exist in this version of Python.
         if not hasattr(module, function_name):
@@ -268,10 +269,7 @@ def root(standardize_tmp: None) -> Generator[str, None, None]:
         for patch in reversed(patches):
             patch.stop()
         os.chdir(current_working_directory)
-        if sys.version_info >= (3, 12):
-            rmtree(current_root, onexc=rmtree_error_handler)
-        else:
-            rmtree(current_root, onerror=rmtree_error_handler)
+        rmtree(current_root, onexc=rmtree_error_handler)
 
 
 @pytest.fixture
@@ -297,7 +295,7 @@ class Dotfiles:
     def __init__(self, root: str):
         self.root = root
         self.config = None
-        self._config_filename: Optional[str] = None
+        self._config_filename: str | None = None
         self.directory = os.path.join(root, "dotfiles")
         os.mkdir(self.directory)
 
@@ -312,7 +310,7 @@ class Dotfiles:
             file.write(content)
 
     def write_config(
-        self, config: Any, serializer: str = "yaml", path: Optional[str] = None
+        self, config: Any, serializer: str = "yaml", path: str | None = None
     ) -> str:
         """Write a dotbot config and return the filename."""
 

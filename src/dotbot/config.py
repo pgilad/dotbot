@@ -1,6 +1,6 @@
 import json
 import os.path
-from typing import Any, List
+from typing import Any
 
 import yaml
 
@@ -8,9 +8,9 @@ from dotbot.util import string
 
 
 class ConfigReader:
-    _config: List[Any]
+    _config: list[Any]
 
-    def __init__(self, config_file_paths: List[str]):
+    def __init__(self, config_file_paths: list[str]):
         self._config = []
         for path in config_file_paths:
             config = self._read(path)
@@ -19,6 +19,10 @@ class ConfigReader:
             if not isinstance(config, list):
                 msg = "Configuration file must be a list of tasks"
                 raise ReadingError(msg)
+            for task in config:
+                if not isinstance(task, dict):
+                    msg = f"Each task must be a mapping of actions, but found: {task!r}"
+                    raise ReadingError(msg)
             self._config.extend(config)
 
     def _read(self, config_file_path: str) -> Any:

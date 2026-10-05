@@ -1,7 +1,7 @@
-from typing import Any, Dict
+from typing import Any
 
 from dotbot.plugin import Plugin
-from dotbot.util.common import shell_command
+from dotbot.util.common import shell_command, unknown_options
 
 
 class Shell(Plugin):
@@ -12,6 +12,8 @@ class Shell(Plugin):
     supports_dry_run = True
 
     _directive = "shell"
+    _default_options = frozenset({"executable", "quiet", "stderr", "stdin", "stdout"})
+    _options = _default_options | {"command", "description"}
     _has_shown_override_message = False
 
     def can_handle(self, directive: str) -> bool:
@@ -26,19 +28,25 @@ class Shell(Plugin):
     def _process_commands(self, data: Any) -> bool:
         success = True
         defaults = self._context.defaults().get("shell", {})
+        for key in unknown_options(defaults, self._default_options):
+            self._log.warning(f"Unknown option '{key}' in shell defaults")
         options = self._get_option_overrides()
         for item in data:
             stdin = defaults.get("stdin", False)
             stdout = defaults.get("stdout", False)
             stderr = defaults.get("stderr", False)
             quiet = defaults.get("quiet", False)
+            executable = defaults.get("executable", None)
             if isinstance(item, dict):
+                for key in unknown_options(item, self._options):
+                    self._log.warning(f"Unknown option '{key}' for shell command")
                 cmd = item["command"]
                 msg = item.get("description", None)
                 stdin = item.get("stdin", stdin)
                 stdout = item.get("stdout", stdout)
                 stderr = item.get("stderr", stderr)
                 quiet = item.get("quiet", quiet)
+                executable = item.get("executable", executable)
             elif isinstance(item, list):
                 cmd = item[0]
                 msg = item[1] if len(item) > 1 else None
@@ -61,6 +69,7 @@ class Shell(Plugin):
             ret = shell_command(
                 cmd,
                 cwd=self._context.base_directory(),
+                executable=executable,
                 enable_stdin=stdin,
                 enable_stdout=stdout,
                 enable_stderr=stderr,
@@ -74,7 +83,7 @@ class Shell(Plugin):
             self._log.error("Some commands were not successfully executed")
         return success
 
-    def _get_option_overrides(self) -> Dict[str, bool]:
+    def _get_option_overrides(self) -> dict[str, bool]:
         ret = {}
         options = self._context.options()
         if options.verbose > 1:

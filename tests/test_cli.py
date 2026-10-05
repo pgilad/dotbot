@@ -1,6 +1,8 @@
 import os
 import shutil
-from typing import Callable
+import subprocess
+import sys
+from collections.abc import Callable
 
 import pytest
 
@@ -347,3 +349,53 @@ def test_dry_run_aware_plugin_no_dry_run(
     run_dotbot("--plugin", os.path.join(dotfiles.directory, "dry_run.py"))
     with open(os.path.join(home, "flag-dry-run")) as file:
         assert file.read() == "Dry run executed"
+
+
+def test_only_loads_plugins(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that `--only` doesn't skip the plugins directive."""
+
+    plugin_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_file.py"
+    )
+    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "file.py"))
+    dotfiles.write_config(
+        [
+            {"plugins": ["file.py"]},
+            {"plugin_file": "no-check-context"},
+        ]
+    )
+    run_dotbot("--only", "plugin_file")
+
+    with open(os.path.join(home, "flag-file")) as file:
+        assert file.read() == "file plugin loading works"
+
+
+def test_plugin_load_error(
+    capfd: pytest.CaptureFixture[str],
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a plugin that cannot be loaded gives an error, not a traceback."""
+
+    dotfiles.write_config([])
+    with pytest.raises(SystemExit) as excinfo:
+        run_dotbot("--plugin", os.path.join(dotfiles.directory, "nonexistent.py"))
+
+    assert excinfo.value.code == 1
+    stderr = capfd.readouterr().err
+    assert "error: Could not load plugins" in stderr
+    assert "Traceback" not in stderr
+
+
+def test_python_m_dotbot() -> None:
+    """Verify that `python -m dotbot` works."""
+
+    result = subprocess.run(
+        [sys.executable, "-m", "dotbot", "--version"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.startswith("Dotbot version")

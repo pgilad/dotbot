@@ -1,6 +1,8 @@
+import copy
 import os
 import shutil
-from typing import Callable
+import sys
+from collections.abc import Callable
 
 import pytest
 
@@ -141,9 +143,9 @@ def test_plugin_nonexistent(
     with pytest.raises(SystemExit) as excinfo:
         run_dotbot()
     assert excinfo.value.code == 1
-    stdout = capfd.readouterr().out.splitlines()
-    assert any("Failed to load plugin 'nonexistent.py'" in line for line in stdout)
-    assert any("Some plugins could not be loaded" in line for line in stdout)
+    stderr = capfd.readouterr().err.splitlines()
+    assert any("Failed to load plugin 'nonexistent.py'" in line for line in stderr)
+    assert any("Some plugins could not be loaded" in line for line in stderr)
 
 
 def test_plugin_empty_list(
@@ -233,3 +235,57 @@ def test_plugin_subdirectory(
     run_dotbot()
     with open(os.path.join(home, "flag-file")) as file:
         assert file.read() == "file plugin loading works"
+
+
+def test_plugin_module_registration(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that plugin modules are in sys.modules, under a private name.
+
+    Some code, such as dataclasses, looks up the module of a class in
+    sys.modules. The plugin file is named copy.py, to verify that it doesn't
+    replace the copy module of the standard library.
+    """
+
+    plugin_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_dataclass.py"
+    )
+    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "copy.py"))
+    dotfiles.write_config(
+        [
+            {"plugins": ["copy.py"]},
+            {"plugin_dataclass": None},
+        ]
+    )
+    run_dotbot()
+
+    with open(os.path.join(home, "flag-dataclass")) as file:
+        assert file.read() == "dataclass plugin loading works"
+    assert sys.modules["copy"] is copy
+
+
+def test_plugin_loading_after_failure(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that an earlier failure doesn't make a later plugin load fail."""
+
+    plugin_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_file.py"
+    )
+    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "file.py"))
+    dotfiles.write_config(
+        [
+            {"shell": ["exit 1"]},
+            {"plugins": ["file.py"]},
+            {"plugin_file": "no-check-context"},
+        ]
+    )
+    with pytest.raises(SystemExit):
+        run_dotbot()
+
+    with open(os.path.join(home, "flag-file")) as file:
+        assert file.read() == "file plugin loading works"
+    assert "Some plugins could not be loaded" not in capfd.readouterr().err

@@ -2,12 +2,12 @@ import glob
 import os
 import shutil
 import sys
-from datetime import datetime, timezone
-from typing import Any, List, Optional, Tuple
+from datetime import datetime, UTC
+from typing import Any
 
 from dotbot.plugin import Plugin
 from dotbot.util import shell_command
-from dotbot.util.common import normslash
+from dotbot.util.common import normslash, undefined_variable, unknown_options
 
 
 class Link(Plugin):
@@ -18,6 +18,24 @@ class Link(Plugin):
     supports_dry_run = True
 
     _directive = "link"
+    _options = frozenset(
+        {
+            "backup",
+            "canonicalize",
+            "canonicalize-path",
+            "create",
+            "exclude",
+            "force",
+            "glob",
+            "if",
+            "ignore-missing",
+            "path",
+            "prefix",
+            "relative",
+            "relink",
+            "type",
+        }
+    )
 
     def can_handle(self, directive: str) -> bool:
         return directive == self._directive
@@ -31,6 +49,8 @@ class Link(Plugin):
     def _process_links(self, links: Any) -> bool:
         success = True
         defaults = self._context.defaults().get("link", {})
+        for key in unknown_options(defaults, self._options):
+            self._log.warning(f"Unknown option '{key}' in link defaults")
 
         # Validate the default link type before looping.
         link_type = defaults.get("type", "symlink")
@@ -57,6 +77,8 @@ class Link(Plugin):
             exclude_paths = defaults.get("exclude", [])
             if isinstance(target, dict):
                 # extended config
+                for key in unknown_options(target, self._options):
+                    self._log.warning(f"Unknown option '{key}' for {link_name}")
                 test = target.get("if", test)
                 relative = target.get("relative", relative)
                 canonical_path = target.get(
@@ -84,14 +106,22 @@ class Link(Plugin):
                 self._log.info(f"Skipping {link_name}")
                 continue
             path = os.path.normpath(os.path.expandvars(os.path.expanduser(path)))
+            # check after the test, which can guard a link that uses a variable;
+            # only warn, because a file name can contain a literal "$"
+            variable = undefined_variable(link_name) or undefined_variable(path)
+            if variable is not None:
+                self._log.warning(
+                    f"Undefined environment variable {variable} in {link_name} -> {path}"
+                    ", using the name as written"
+                )
             if use_glob and self._has_glob_chars(path):
                 glob_results = self._create_glob_results(path, exclude_paths)
                 self._log.debug(f"Globs from '{path}': {glob_results}")
+                if not glob_results and not ignore_missing:
+                    self._log.warning(f"No files match {link_name} -> {path}")
                 for glob_full_item in glob_results:
                     # Find common dirname between pattern and the item:
-                    glob_dirname = os.path.dirname(
-                        os.path.commonprefix([path, glob_full_item])
-                    )
+                    glob_dirname = os.path.commonpath([path, glob_full_item])
                     glob_item = (
                         glob_full_item
                         if len(glob_dirname) == 0
@@ -176,7 +206,7 @@ class Link(Plugin):
             self._log.debug(f"Test '{command}' returned false")
         return ret == 0
 
-    def _default_target(self, link_name: str, target: Optional[str]) -> str:
+    def _default_target(self, link_name: str, target: str | None) -> str:
         if target is None:
             basename = os.path.basename(link_name)
             if basename.startswith("."):
@@ -187,7 +217,7 @@ class Link(Plugin):
     def _has_glob_chars(self, path: str) -> bool:
         return any(i in path for i in "?*[")
 
-    def _glob(self, path: str) -> List[str]:
+    def _glob(self, path: str) -> list[str]:
         """
         Wrap `glob.glob` in a python agnostic way, catching errors in usage.
         """
@@ -201,7 +231,7 @@ class Link(Plugin):
         # return matched results
         return found
 
-    def _create_glob_results(self, path: str, exclude_paths: List[str]) -> List[str]:
+    def _create_glob_results(self, path: str, exclude_paths: list[str]) -> list[str]:
         self._log.debug("Globbing with pattern: " + str(path))
         include = self._glob(path)
         self._log.debug("Glob found : " + str(include))
@@ -262,11 +292,9 @@ class Link(Plugin):
                 self._log.action(f"Creating directory {parent}")
         return success
 
-    def _backup(self, path: str) -> Tuple[bool, bool]:
+    def _backup(self, path: str) -> tuple[bool, bool]:
         if self._exists(path) and not self._is_link(path):
-            timestamp = (
-                datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M%S")
-            )
+            timestamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
             backup_name = f"{path}.dotbot-backup.{timestamp}"
             self._log.debug(f"Try to backup file {path} to {backup_name}")
             if self._context.dry_run():
@@ -294,7 +322,7 @@ class Link(Plugin):
         relative: bool,
         canonical_path: bool,
         force: bool,
-    ) -> Tuple[bool, bool]:
+    ) -> tuple[bool, bool]:
         success = True
         removed = False
         target = os.path.join(
@@ -317,8 +345,10 @@ class Link(Plugin):
             self._lexists(path) and not self._is_link(path)
         ):
             if self._context.dry_run():
-                self._log.action(f"Would remove {path}")
-                removed = True
+                # same condition as below: without force, only symlinks are removed
+                if os.path.islink(fullpath) or force:
+                    self._log.action(f"Would remove {path}")
+                    removed = True
             else:
                 try:
                     if os.path.islink(fullpath):

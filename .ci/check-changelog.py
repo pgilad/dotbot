@@ -5,7 +5,6 @@ import argparse
 import re
 import subprocess
 import sys
-from typing import Set, Tuple
 
 
 def main() -> None:
@@ -31,13 +30,13 @@ def main() -> None:
     print("All versions are present in the changelog.")  # noqa: T201
 
 
-def get_git_minor_versions() -> Set[str]:
+def get_git_minor_versions() -> set[str]:
     """
     Get all major/minor versions (but not patch versions) from git tags.
     """
     tags = subprocess.check_output(["git", "tag", "--list"]).decode().splitlines()  # noqa: S607
     major_minor_re = re.compile(r"^v(\d+\.\d+)\.\d+$")
-    versions: Set[str] = set()
+    versions: set[str] = set()
     for tag in tags:
         m = major_minor_re.match(tag)
         if m:
@@ -45,7 +44,7 @@ def get_git_minor_versions() -> Set[str]:
     return versions
 
 
-def get_changelog_versions(changelog_path: str) -> Set[str]:
+def get_changelog_versions(changelog_path: str) -> set[str]:
     """
     Get all versions listed in the changelog.
     """
@@ -55,7 +54,7 @@ def get_changelog_versions(changelog_path: str) -> Set[str]:
     return {m.group(1) for m in version_re.finditer(changelog)}
 
 
-def version_to_tuple(version: str) -> Tuple[int, ...]:
+def version_to_tuple(version: str) -> tuple[int, ...]:
     """
     Convert a version string without the "v" prefix to a tuple.
     """
