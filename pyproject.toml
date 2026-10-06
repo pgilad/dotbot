@@ -50,12 +50,6 @@ python = ["3.14", "3.15"]
 # don't collect the tests of the libraries in lib/
 testpaths = ["tests"]
 
-[tool.coverage.run]
-omit = [
-  "*/tests/*",
-  "*/dotfiles/*" # the tests create some .py files in a "dotfiles" directory
-]
-
 [tool.hatch.envs.types]
 extra-dependencies = [
   "mypy>=2.0.0",
@@ -65,16 +59,6 @@ extra-dependencies = [
 
 [tool.hatch.envs.types.scripts]
 check = "mypy {args:src tests}"
-
-[tool.hatch.envs.coverage]
-detached = true
-installer = "uv"
-dependencies = [
-  "coverage[toml]",
-]
-
-[tool.hatch.envs.coverage.scripts]
-html = "coverage html"
 
 [tool.mypy]
 strict = true
