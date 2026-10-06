@@ -34,7 +34,7 @@ Dotbot is a command-line application. Install it with [uv], which also downloads
 uv tool install git+https://github.com/pgilad/dotbot
 ```
 
-To install a specific [release][releases], add its tag to the URL, for example `git+https://github.com/pgilad/dotbot@v3.0.0`. To upgrade Dotbot, run `uv tool upgrade dotbot`.
+To install a specific [release][releases], add its tag to the URL, for example `git+https://github.com/pgilad/dotbot@v3.1.0`. To upgrade Dotbot, run `uv tool upgrade dotbot`.
 
 Dotbot isn't on PyPI. The `dotbot` package on PyPI is a different project.
 
