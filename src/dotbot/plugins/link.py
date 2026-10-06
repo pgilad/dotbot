@@ -13,6 +13,7 @@ from dotbot.plugin import Plugin
 from dotbot.util import shell_command
 from dotbot.util.common import (
     display_path,
+    error_reason,
     normslash,
     undefined_variable,
     unknown_options,
@@ -115,7 +116,9 @@ class Link(Plugin):
                 path = self._default_target(link_name, target)
             path = normslash(path)
             if test is not None and not self._test_success(test):
-                self._log.info(f"Skipping {display_path(link_name)}")
+                self._log.info(
+                    f"Skipping {display_path(link_name)}, because `if: {test}` is false"
+                )
                 continue
             path = os.path.normpath(os.path.expandvars(os.path.expanduser(path)))
             # check after the test, which can guard a link that uses a variable;
@@ -319,8 +322,9 @@ class Link(Plugin):
             try:
                 os.makedirs(parent)
             except OSError as e:
-                self._log.error(f"Failed to create directory {display_path(parent)}")
-                self._log.debug(f"OSError: {e!s}")
+                self._log.error(
+                    f"Failed to create directory {display_path(parent)}: {error_reason(e)}"
+                )
                 success = False
             else:
                 self._log.action(f"Creating directory {display_path(parent)}")
@@ -343,9 +347,8 @@ class Link(Plugin):
                 )
             except OSError as e:
                 self._log.error(
-                    f"Failed to backup file {display_path(path)} to {display_path(backup_name)}"
+                    f"Failed to backup file {display_path(path)} to {display_path(backup_name)}: {error_reason(e)}"
                 )
-                self._log.debug(f"OSError: {e!s}")
                 return False, False
             else:
                 self._log.action(
@@ -378,7 +381,7 @@ class Link(Plugin):
             # Deleting the path would actually delete the target.
             # This may happen if a parent directory is a symlink.
             self._log.error(
-                f"{display_path(path)} appears to be the same file as {display_path(target)}."
+                f"{display_path(path)} appears to be the same file as {display_path(target)}"
             )
             return False, False
         if relative:
@@ -404,8 +407,9 @@ class Link(Plugin):
                             os.remove(fullpath)
                             removed = True
                 except OSError as e:
-                    self._log.error(f"Failed to remove {display_path(path)}")
-                    self._log.debug(f"OSError: {e!s}")
+                    self._log.error(
+                        f"Failed to remove {display_path(path)}: {error_reason(e)}"
+                    )
                     success = False
                 else:
                     if removed:
@@ -467,9 +471,8 @@ class Link(Plugin):
                     os.link(absolute_target, link_path)
             except OSError as e:
                 self._log.error(
-                    f"Linking failed {display_path(link_name)} -> {display_path(target_path)}"
+                    f"Linking failed {display_path(link_name)} -> {display_path(target_path)}: {error_reason(e)}"
                 )
-                self._log.debug(f"OSError: {e!s}")
                 return False
             else:
                 self._log.action(
@@ -512,8 +515,10 @@ class Link(Plugin):
             )
             return True
 
+        found = "directory" if os.path.isdir(link_path) else "file"
+        expected = "hard link" if link_type == "hardlink" else "symbolic link"
         self._log.error(
-            f"{display_path(link_name)} already exists but is a regular file or directory"
+            f"{display_path(link_name)} already exists but is a {found}, not a {expected}"
         )
         return False
 
@@ -584,9 +589,8 @@ class Link(Plugin):
                 differs = self._differs(source, destination)
             except OSError as e:
                 self._log.error(
-                    f"Failed to compare {display_path(link_name)} with {display_path(source)}"
+                    f"Failed to compare {display_path(link_name)} with {display_path(source)}: {error_reason(e)}"
                 )
-                self._log.debug(f"OSError: {e!s}")
                 return False
             if not differs:
                 self._log.info(
@@ -621,9 +625,8 @@ class Link(Plugin):
                 self._copy_file(source, destination)
         except OSError as e:
             self._log.error(
-                f"Copying failed {display_path(link_name)} -> {display_path(source)}"
+                f"Copying failed {display_path(link_name)} -> {display_path(source)}: {error_reason(e)}"
             )
-            self._log.debug(f"OSError: {e!s}")
             return False
         self._log.action(
             f"{'Updating' if exists else 'Creating'} copy {display_path(link_name)} -> {display_path(source)}"
@@ -708,8 +711,7 @@ class Link(Plugin):
         try:
             self._remove_path(path)
         except OSError as e:
-            self._log.error(f"Failed to remove {display_path(name)}")
-            self._log.debug(f"OSError: {e!s}")
+            self._log.error(f"Failed to remove {display_path(name)}: {error_reason(e)}")
             return False
         self._log.action(f"Removing {display_path(name)}")
         return True

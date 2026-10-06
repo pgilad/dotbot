@@ -84,10 +84,12 @@ def test_create_dry_run(
 
     lines = capfd.readouterr().out.splitlines()
     assert any(
-        line.strip() == f"Would create path {os.path.join('~', 'a')}" for line in lines
+        line.strip() == f"Would create directory {os.path.join('~', 'a')}"
+        for line in lines
     )
     assert any(
-        f"Path exists {os.path.join('~', 'existing')}" == line.strip() for line in lines
+        f"Directory exists {os.path.join('~', 'existing')}" == line.strip()
+        for line in lines
     )
 
 
@@ -109,3 +111,26 @@ def test_create_undefined_variable_warns(
 
     assert os.path.isdir(os.path.join(home, "$PEAR"))
     assert "Undefined environment variable $PEAR in ~/$PEAR" in capfd.readouterr().err
+
+
+def test_create_file_in_the_way(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a file where a directory should be gives a warning.
+
+    The file is kept, and the run doesn't fail, as before.
+    """
+
+    with open(os.path.join(home, "a"), "w") as file:
+        file.write("apple")
+    dotfiles.write_config([{"create": ["~/a"]}])
+    run_dotbot()
+
+    assert os.path.isfile(os.path.join(home, "a"))
+    assert (
+        f"warning: {os.path.join('~', 'a')} already exists but is not a directory"
+        in capfd.readouterr().err.splitlines()
+    )

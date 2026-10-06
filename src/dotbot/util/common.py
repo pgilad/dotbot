@@ -61,6 +61,14 @@ def unknown_options(options: Any, known: Collection[str]) -> list[str]:
     return [str(key) for key in options if key not in known]
 
 
+def error_reason(error: OSError) -> str:
+    """
+    Returns the reason of an OSError for a log message, such as "Permission
+    denied".
+    """
+    return error.strerror or str(error)
+
+
 def display_path(path: str) -> str:
     """
     Returns a path for a log message, with ~ in place of the home directory.

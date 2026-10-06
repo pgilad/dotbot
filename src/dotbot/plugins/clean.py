@@ -78,7 +78,8 @@ class Clean(Plugin):
                         os.remove(path)
                 else:
                     self._log.info(
-                        f"Link {display_path(path)} -> {display_path(points_at)} not removed."
+                        f"Keeping invalid link {display_path(path)} -> {display_path(points_at)}"
+                        ", because it points outside of the base directory"
                     )
         return True
 

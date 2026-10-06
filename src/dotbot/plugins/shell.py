@@ -80,7 +80,14 @@ class Shell(Plugin):
             )
             if ret != 0:
                 success = False
-                self._log.error(f"Command [{cmd}] failed")
+                # a negative code is the number of the signal that stopped the
+                # command (POSIX)
+                reason = (
+                    f"was stopped by signal {-ret}"
+                    if ret < 0
+                    else f"failed with exit code {ret}"
+                )
+                self._log.error(f"Command [{cmd}] {reason}")
         return success
 
     def _get_option_overrides(self) -> dict[str, bool]:
@@ -90,8 +97,6 @@ class Shell(Plugin):
             ret["stderr"] = True
             ret["stdout"] = True
             if not self._has_shown_override_message:
-                self._log.debug(
-                    "Shell: Found cli option to force show stderr and stdout."
-                )
+                self._log.debug("Showing the output of shell commands, because of -vv")
                 self._has_shown_override_message = True
         return ret

@@ -4,6 +4,7 @@ from typing import Any
 from dotbot.plugin import Plugin
 from dotbot.util.common import (
     display_path,
+    error_reason,
     normslash,
     undefined_variable,
     unknown_options,
@@ -64,19 +65,27 @@ class Create(Plugin):
     def _create(self, path: str, mode: int) -> bool:
         success = True
         if not self._exists(path):
-            self._log.debug(f"Trying to create path {path} with mode {mode}")
+            mode_text = f"{mode:#o}" if isinstance(mode, int) else repr(mode)
+            self._log.debug(f"Trying to create directory {path} with mode {mode_text}")
             try:
                 if self._context.dry_run():
-                    self._log.action(f"Would create path {display_path(path)}")
+                    self._log.action(f"Would create directory {display_path(path)}")
                     return True
-                self._log.action(f"Creating path {display_path(path)}")
                 os.makedirs(path, mode)
                 # On Windows, the *mode* argument to `os.makedirs()` is ignored.
                 # The mode must be set explicitly in a follow-up call.
                 os.chmod(path, mode)
-            except OSError:
-                self._log.error(f"Failed to create path {display_path(path)}")
+            except OSError as e:
+                self._log.error(
+                    f"Failed to create directory {display_path(path)}: {error_reason(e)}"
+                )
                 success = False
+            else:
+                self._log.action(f"Creating directory {display_path(path)}")
+        elif os.path.isdir(path):
+            self._log.info(f"Directory exists {display_path(path)}")
         else:
-            self._log.info(f"Path exists {display_path(path)}")
+            self._log.warning(
+                f"{display_path(path)} already exists but is not a directory"
+            )
         return success

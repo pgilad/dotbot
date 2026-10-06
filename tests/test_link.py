@@ -1648,7 +1648,7 @@ def test_hardlink_ignore_missing_with_existing_file(
         run_dotbot()
 
     stderr = capfd.readouterr().err
-    assert "already exists but is a regular file or directory" in stderr
+    assert "already exists but is a file, not a hard link" in stderr
     assert "An error was encountered" not in stderr
 
 
@@ -1913,8 +1913,13 @@ def test_link_error_creating_link(
     # Restore permissions to allow test cleanup.
     os.chmod(os.path.join(home, "subdir"), old_permissions)
 
+    # the error tells the reason
     _, stderr = capsys.readouterr()
-    assert "Linking failed" in stderr
+    assert any(
+        line.startswith("error: Linking failed")
+        and line.endswith(": Permission denied")
+        for line in stderr.splitlines()
+    )
 
 
 @pytest.mark.skipif(
@@ -2029,7 +2034,7 @@ def test_link_dry_run_relink_regular_file(
     output = capfd.readouterr()
     assert "Would remove" not in output.out
     assert "Would create" not in output.out
-    assert "already exists but is a regular file or directory" in output.err
+    assert "already exists but is a file, not a symbolic link" in output.err
 
 
 def test_link_undefined_variable_warns(

@@ -470,3 +470,32 @@ def test_shell_output_order_with_pipe(home: str, dotfiles: Dotfiles) -> None:
 
     lines = [line.strip() for line in result.stdout.splitlines()]
     assert lines == ["echo apple", "apple", "echo banana", "banana", "Done (2 actions)"]
+
+
+@pytest.mark.parametrize(
+    ("command", "reason"),
+    [
+        ("exit 3", "failed with exit code 3"),
+        pytest.param(
+            "kill -9 $$",
+            "was stopped by signal 9",
+            marks=pytest.mark.skipif(
+                "sys.platform == 'win32'", reason="Windows has no signals"
+            ),
+        ),
+    ],
+)
+def test_shell_failure_reason(
+    command: str,
+    reason: str,
+    capfd: pytest.CaptureFixture[str],
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a failed command shows its exit code or its signal."""
+
+    dotfiles.write_config([{"shell": [command]}])
+    with pytest.raises(SystemExit):
+        run_dotbot()
+
+    assert f"error: Command [{command}] {reason}" in capfd.readouterr().err.splitlines()
