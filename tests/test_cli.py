@@ -550,3 +550,41 @@ def test_plugin_failure_without_error(
         "error: Action fail failed",
         "error: Failed (1 error)",
     ]
+
+
+def test_color_output(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify the colors of the levels, and that color keeps the level words.
+
+    Without the words, the level is lost when the color is (for example, in a
+    copied log, or for a reader who can't see the color).
+    """
+
+    _ = home
+    dotfiles.write("f")
+    # create logs a debug message for the parent directory
+    dotfiles.write_config(
+        [
+            {
+                "link": {
+                    "~/d/f": {"path": "f", "create": True, "unknown": True},
+                    "~/.missing": "missing",
+                }
+            }
+        ]
+    )
+    with pytest.raises(SystemExit):
+        run_dotbot("--force-color", "-vv")
+
+    output = capfd.readouterr()
+    stderr = output.err.splitlines()
+    stdout = output.out.splitlines()
+    link = os.path.join("~", "d", "f")
+    assert f"\033[93mwarning: Unknown option 'unknown' for {link}\033[0m" in stderr
+    assert "\033[91merror: Failed (1 error, 1 warning, 2 actions)\033[0m" in stderr
+    assert any(line.startswith("\033[92mCreating symlink ") for line in stdout)
+    assert any(line.startswith("\033[90m") for line in stdout)

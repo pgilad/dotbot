@@ -65,20 +65,20 @@ class Messenger(metaclass=Singleton):
         if not self._use_color or level < Level.DEBUG:
             return ""
         if level < Level.INFO:
-            return Color.YELLOW
+            return Color.GRAY
         if level < Level.ACTION:
             return Color.BLUE
         if level < Level.WARNING:
             return Color.GREEN
         if level < Level.ERROR:
-            return Color.MAGENTA
+            return Color.YELLOW
         return Color.RED
 
     def _prefix(self, level: Level) -> str:
         """
-        Get a prefix that shows the level of a message when color is disabled.
+        Get a prefix that shows the level of a message, also without color.
         """
-        if self._use_color or level < Level.WARNING:
+        if level < Level.WARNING:
             return ""
         if level < Level.ERROR:
             return "warning: "
