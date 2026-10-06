@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from dotbot.plugin import Plugin
-from dotbot.util.common import normslash, unknown_options
+from dotbot.util.common import display_path, normslash, unknown_options
 
 
 class Clean(Plugin):
@@ -36,7 +36,9 @@ class Clean(Plugin):
             recursive = defaults.get("recursive", False)
             if isinstance(targets, dict) and isinstance(targets[target], dict):
                 for key in unknown_options(targets[target], self._options):
-                    self._log.warning(f"Unknown option '{key}' for {target}")
+                    self._log.warning(
+                        f"Unknown option '{key}' for {display_path(target)}"
+                    )
                 force = targets[target].get("force", force)
                 recursive = targets[target].get("recursive", recursive)
             success &= self._clean(normslash(target), force=force, recursive=recursive)
@@ -71,13 +73,17 @@ class Clean(Plugin):
                 if self._in_directory(path, self._context.base_directory()) or force:
                     if self._context.dry_run():
                         self._log.action(
-                            f"Would remove invalid link {path} -> {points_at}"
+                            f"Would remove invalid link {display_path(path)} -> {display_path(points_at)}"
                         )
                     else:
-                        self._log.action(f"Removing invalid link {path} -> {points_at}")
+                        self._log.action(
+                            f"Removing invalid link {display_path(path)} -> {display_path(points_at)}"
+                        )
                         os.remove(path)
                 else:
-                    self._log.info(f"Link {path} -> {points_at} not removed.")
+                    self._log.info(
+                        f"Link {display_path(path)} -> {display_path(points_at)} not removed."
+                    )
         return True
 
     def _in_directory(self, path: str, directory: str) -> bool:

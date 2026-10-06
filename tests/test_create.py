@@ -84,11 +84,10 @@ def test_create_dry_run(
 
     lines = capfd.readouterr().out.splitlines()
     assert any(
-        line.strip() == f"Would create path {os.path.join(home, 'a')}" for line in lines
+        line.strip() == f"Would create path {os.path.join('~', 'a')}" for line in lines
     )
     assert any(
-        f"Path exists {os.path.join(home, 'existing')}" == line.strip()
-        for line in lines
+        f"Path exists {os.path.join('~', 'existing')}" == line.strip() for line in lines
     )
 
 

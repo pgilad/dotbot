@@ -176,7 +176,7 @@ def test_clean_dry_run(
 
     lines = capfd.readouterr().out.splitlines()
     assert any(
-        f"Would remove invalid link {os.path.join(home, '.g')} -> {os.path.join(root, 'nowhere')}"
+        f"Would remove invalid link {os.path.join('~', '.g')} -> {os.path.join(root, 'nowhere')}"
         in line
         for line in lines
     )
@@ -204,17 +204,17 @@ def test_clean_dry_run_recursive(
 
     lines = capfd.readouterr().out.splitlines()
     assert any(
-        f"Would remove invalid link {os.path.join(home, 'c')} -> {os.path.join(root, 'nowhere')}"
+        f"Would remove invalid link {os.path.join('~', 'c')} -> {os.path.join(root, 'nowhere')}"
         in line
         for line in lines
     )
     assert any(
-        f"Would remove invalid link {os.path.join(home, 'a', 'd')} -> {os.path.join(root, 'nowhere')}"
+        f"Would remove invalid link {os.path.join('~', 'a', 'd')} -> {os.path.join(root, 'nowhere')}"
         in line
         for line in lines
     )
     assert any(
-        f"Would remove invalid link {os.path.join(home, 'a', 'b', 'e')} -> {os.path.join(root, 'nowhere')}"
+        f"Would remove invalid link {os.path.join('~', 'a', 'b', 'e')} -> {os.path.join(root, 'nowhere')}"
         in line
         for line in lines
     )

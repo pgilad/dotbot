@@ -61,6 +61,23 @@ def unknown_options(options: Any, known: Collection[str]) -> list[str]:
     return [str(key) for key in options if key not in known]
 
 
+def display_path(path: str) -> str:
+    """
+    Returns a path for a log message, with ~ in place of the home directory.
+    """
+    home = os.path.expanduser("~")
+    for directory in dict.fromkeys([home, os.path.realpath(home)]):
+        # a home directory that is the root (such as in some containers)
+        # would make every absolute path start with ~
+        if not os.path.isabs(directory) or os.path.dirname(directory) == directory:
+            continue
+        if path == directory:
+            return "~"
+        if path.startswith(directory + os.sep):
+            return os.path.join("~", path[len(directory) + len(os.sep) :])
+    return path
+
+
 def normslash(path: str) -> str:
     if sys.platform == "win32":
         # this is how normcase in cpython/Lib/ntpath.py does it; we don't use normcase

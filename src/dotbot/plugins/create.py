@@ -2,7 +2,12 @@ import os
 from typing import Any
 
 from dotbot.plugin import Plugin
-from dotbot.util.common import normslash, undefined_variable, unknown_options
+from dotbot.util.common import (
+    display_path,
+    normslash,
+    undefined_variable,
+    unknown_options,
+)
 
 
 class Create(Plugin):
@@ -66,16 +71,16 @@ class Create(Plugin):
             self._log.debug(f"Trying to create path {path} with mode {mode}")
             try:
                 if self._context.dry_run():
-                    self._log.action(f"Would create path {path}")
+                    self._log.action(f"Would create path {display_path(path)}")
                     return True
-                self._log.action(f"Creating path {path}")
+                self._log.action(f"Creating path {display_path(path)}")
                 os.makedirs(path, mode)
                 # On Windows, the *mode* argument to `os.makedirs()` is ignored.
                 # The mode must be set explicitly in a follow-up call.
                 os.chmod(path, mode)
             except OSError:
-                self._log.warning(f"Failed to create path {path}")
+                self._log.warning(f"Failed to create path {display_path(path)}")
                 success = False
         else:
-            self._log.info(f"Path exists {path}")
+            self._log.info(f"Path exists {display_path(path)}")
         return success

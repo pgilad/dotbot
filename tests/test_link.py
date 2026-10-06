@@ -1789,7 +1789,7 @@ def test_link_dry_run_create(
 
     lines = capfd.readouterr().out.splitlines()
     assert any(
-        line.strip() == f"Would create directory {os.path.join(home, '.config')}"
+        line.strip() == f"Would create directory {os.path.join('~', '.config')}"
         for line in lines
     )
     assert any(

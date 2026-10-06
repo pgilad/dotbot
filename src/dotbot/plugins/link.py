@@ -11,7 +11,12 @@ from typing import Any
 
 from dotbot.plugin import Plugin
 from dotbot.util import shell_command
-from dotbot.util.common import normslash, undefined_variable, unknown_options
+from dotbot.util.common import (
+    display_path,
+    normslash,
+    undefined_variable,
+    unknown_options,
+)
 
 
 class Link(Plugin):
@@ -83,7 +88,9 @@ class Link(Plugin):
             if isinstance(target, dict):
                 # extended config
                 for key in unknown_options(target, self._options):
-                    self._log.warning(f"Unknown option '{key}' for {link_name}")
+                    self._log.warning(
+                        f"Unknown option '{key}' for {display_path(link_name)}"
+                    )
                 test = target.get("if", test)
                 relative = target.get("relative", relative)
                 canonical_path = target.get(
@@ -108,7 +115,7 @@ class Link(Plugin):
                 path = self._default_target(link_name, target)
             path = normslash(path)
             if test is not None and not self._test_success(test):
-                self._log.info(f"Skipping {link_name}")
+                self._log.info(f"Skipping {display_path(link_name)}")
                 continue
             path = os.path.normpath(os.path.expandvars(os.path.expanduser(path)))
             # check after the test, which can guard a link that uses a variable;
@@ -116,14 +123,16 @@ class Link(Plugin):
             variable = undefined_variable(link_name) or undefined_variable(path)
             if variable is not None:
                 self._log.warning(
-                    f"Undefined environment variable {variable} in {link_name} -> {path}"
+                    f"Undefined environment variable {variable} in {display_path(link_name)} -> {display_path(path)}"
                     ", using the name as written"
                 )
             if use_glob and self._has_glob_chars(path):
                 glob_results = self._create_glob_results(path, exclude_paths)
                 self._log.debug(f"Globs from '{path}': {glob_results}")
                 if not glob_results and not ignore_missing:
-                    self._log.warning(f"No files match {link_name} -> {path}")
+                    self._log.warning(
+                        f"No files match {display_path(link_name)} -> {display_path(path)}"
+                    )
                 for glob_full_item in glob_results:
                     # Find common dirname between pattern and the item:
                     glob_dirname = os.path.commonpath([path, glob_full_item])
@@ -184,7 +193,9 @@ class Link(Plugin):
                     # if the file doesn't exist and force is True, we don't
                     # want to remove the original (this is tested by test_link_force_leaves_when_nonexistent)
                     success = False
-                    self._log.warning(f"Nonexistent target {link_name} -> {path}")
+                    self._log.warning(
+                        f"Nonexistent target {display_path(link_name)} -> {display_path(path)}"
+                    )
                     continue
                 if link_type == "copy":
                     success &= self._copy(
@@ -307,16 +318,16 @@ class Link(Plugin):
         if not self._exists(parent):
             self._log.debug(f"Try to create parent: {parent}")
             if self._context.dry_run():
-                self._log.action(f"Would create directory {parent}")
+                self._log.action(f"Would create directory {display_path(parent)}")
                 return True
             try:
                 os.makedirs(parent)
             except OSError as e:
-                self._log.warning(f"Failed to create directory {parent}")
+                self._log.warning(f"Failed to create directory {display_path(parent)}")
                 self._log.debug(f"OSError: {e!s}")
                 success = False
             else:
-                self._log.action(f"Creating directory {parent}")
+                self._log.action(f"Creating directory {display_path(parent)}")
         return success
 
     def _backup(self, path: str) -> tuple[bool, bool]:
@@ -325,7 +336,9 @@ class Link(Plugin):
             backup_name = f"{path}.dotbot-backup.{timestamp}"
             self._log.debug(f"Try to backup file {path} to {backup_name}")
             if self._context.dry_run():
-                self._log.action(f"Would backup {path} to {backup_name}")
+                self._log.action(
+                    f"Would backup {display_path(path)} to {display_path(backup_name)}"
+                )
                 return True, True
             try:
                 os.rename(
@@ -333,11 +346,15 @@ class Link(Plugin):
                     os.path.abspath(os.path.expanduser(backup_name)),
                 )
             except OSError as e:
-                self._log.warning(f"Failed to backup file {path} to {backup_name}")
+                self._log.warning(
+                    f"Failed to backup file {display_path(path)} to {display_path(backup_name)}"
+                )
                 self._log.debug(f"OSError: {e!s}")
                 return False, False
             else:
-                self._log.action(f"Backed up file {path} to {backup_name}")
+                self._log.action(
+                    f"Backed up file {display_path(path)} to {display_path(backup_name)}"
+                )
                 return True, True
         return False, True
 
@@ -364,7 +381,9 @@ class Link(Plugin):
             # Special case: The path is not a symlink but resolves to the target anyway.
             # Deleting the path would actually delete the target.
             # This may happen if a parent directory is a symlink.
-            self._log.warning(f"{path} appears to be the same file as {target}.")
+            self._log.warning(
+                f"{display_path(path)} appears to be the same file as {display_path(target)}."
+            )
             return False, False
         if relative:
             target = self._relative_path(target, fullpath)
@@ -374,7 +393,7 @@ class Link(Plugin):
             if self._context.dry_run():
                 # same condition as below: without force, only symlinks are removed
                 if os.path.islink(fullpath) or force:
-                    self._log.action(f"Would remove {path}")
+                    self._log.action(f"Would remove {display_path(path)}")
                     removed = True
             else:
                 try:
@@ -389,12 +408,12 @@ class Link(Plugin):
                             os.remove(fullpath)
                             removed = True
                 except OSError as e:
-                    self._log.warning(f"Failed to remove {path}")
+                    self._log.warning(f"Failed to remove {display_path(path)}")
                     self._log.debug(f"OSError: {e!s}")
                     success = False
                 else:
                     if removed:
-                        self._log.action(f"Removing {path}")
+                        self._log.action(f"Removing {display_path(path)}")
         return removed, success
 
     def _relative_path(self, target: str, link_name: str) -> str:
@@ -442,7 +461,7 @@ class Link(Plugin):
         ) and (ignore_missing or self._exists(absolute_target)):
             if self._context.dry_run():
                 self._log.action(
-                    f"Would create {link_type} {link_name} -> {target_path}"
+                    f"Would create {link_type} {display_path(link_name)} -> {display_path(target_path)}"
                 )
                 return True
             try:
@@ -451,11 +470,15 @@ class Link(Plugin):
                 else:  # link_type == "hardlink"
                     os.link(absolute_target, link_path)
             except OSError as e:
-                self._log.warning(f"Linking failed {link_name} -> {target_path}")
+                self._log.warning(
+                    f"Linking failed {display_path(link_name)} -> {display_path(target_path)}"
+                )
                 self._log.debug(f"OSError: {e!s}")
                 return False
             else:
-                self._log.action(f"Creating {link_type} {link_name} -> {target_path}")
+                self._log.action(
+                    f"Creating {link_type} {display_path(link_name)} -> {display_path(target_path)}"
+                )
                 return True
 
         # Failure case: The link name exists and is a symlink
@@ -463,19 +486,21 @@ class Link(Plugin):
             if link_type == "symlink":
                 if self._link_target(link_name) == target_path:
                     # Idempotent case: The configured symlink already exists
-                    self._log.info(f"Link exists {link_name} -> {target_path}")
+                    self._log.info(
+                        f"Link exists {display_path(link_name)} -> {display_path(target_path)}"
+                    )
                     return True
 
                 # The existing symlink isn't pointing at the target.
                 # Distinguish between an incorrect symlink and a broken ("invalid") symlink.
                 terminology = "Incorrect" if self._exists(link_name) else "Invalid"
                 self._log.warning(
-                    f"{terminology} link {link_name} -> {self._link_target(link_name)}"
+                    f"{terminology} link {display_path(link_name)} -> {display_path(self._link_target(link_name))}"
                 )
                 return False
 
             self._log.warning(
-                f"{link_name} already exists but is a symbolic link, not a hard link"
+                f"{display_path(link_name)} already exists but is a symbolic link, not a hard link"
             )
             return False
 
@@ -486,11 +511,13 @@ class Link(Plugin):
             and os.path.samefile(link_path, absolute_target)
         ):
             # Idempotent case: The configured hardlink already exists
-            self._log.info(f"Link exists {link_name} -> {target_path}")
+            self._log.info(
+                f"Link exists {display_path(link_name)} -> {display_path(target_path)}"
+            )
             return True
 
         self._log.warning(
-            f"{link_name} already exists but is a regular file or directory"
+            f"{display_path(link_name)} already exists but is a regular file or directory"
         )
         return False
 
@@ -527,17 +554,19 @@ class Link(Plugin):
         if not os.path.exists(source):
             if ignore_missing:
                 self._log.info(
-                    f"Nothing to copy, nonexistent target {link_name} -> {source}"
+                    f"Nothing to copy, nonexistent target {display_path(link_name)} -> {display_path(source)}"
                 )
                 return True
-            self._log.warning(f"Nonexistent target {link_name} -> {source}")
+            self._log.warning(
+                f"Nonexistent target {display_path(link_name)} -> {display_path(source)}"
+            )
             return False
 
         exists = os.path.lexists(destination)
         if exists and os.path.islink(destination):
             if not (relink or force):
                 self._log.warning(
-                    f"{link_name} already exists but is a symbolic link, not a copy"
+                    f"{display_path(link_name)} already exists but is a symbolic link, not a copy"
                 )
                 return False
             if not self._remove(destination, link_name):
@@ -551,21 +580,27 @@ class Link(Plugin):
                 ("directory", "file") if source_is_directory else ("file", "directory")
             )
             self._log.warning(
-                f"{link_name} already exists but is a {found}, not a {expected}"
+                f"{display_path(link_name)} already exists but is a {found}, not a {expected}"
             )
             return False
         if exists and not other_type:
             try:
                 differs = self._differs(source, destination)
             except OSError as e:
-                self._log.warning(f"Failed to compare {link_name} with {source}")
+                self._log.warning(
+                    f"Failed to compare {display_path(link_name)} with {display_path(source)}"
+                )
                 self._log.debug(f"OSError: {e!s}")
                 return False
             if not differs:
-                self._log.info(f"Copy exists {link_name} -> {source}")
+                self._log.info(
+                    f"Copy exists {display_path(link_name)} -> {display_path(source)}"
+                )
                 return True
             if not (force or backup):
-                self._log.info(f"Copy {link_name} differs from {source}, keeping it")
+                self._log.info(
+                    f"Copy {display_path(link_name)} differs from {display_path(source)}, keeping it"
+                )
                 return True
         if exists and backup:
             _, backup_success = self._backup(link_name)
@@ -579,7 +614,9 @@ class Link(Plugin):
 
         verb = "update" if exists else "create"
         if self._context.dry_run():
-            self._log.action(f"Would {verb} copy {link_name} -> {source}")
+            self._log.action(
+                f"Would {verb} copy {display_path(link_name)} -> {display_path(source)}"
+            )
             return True
         try:
             if source_is_directory:
@@ -587,11 +624,13 @@ class Link(Plugin):
             else:
                 self._copy_file(source, destination)
         except OSError as e:
-            self._log.warning(f"Copying failed {link_name} -> {source}")
+            self._log.warning(
+                f"Copying failed {display_path(link_name)} -> {display_path(source)}"
+            )
             self._log.debug(f"OSError: {e!s}")
             return False
         self._log.action(
-            f"{'Updating' if exists else 'Creating'} copy {link_name} -> {source}"
+            f"{'Updating' if exists else 'Creating'} copy {display_path(link_name)} -> {display_path(source)}"
         )
         return True
 
@@ -668,15 +707,15 @@ class Link(Plugin):
         Removes a symlink, file, or directory. Returns true on success.
         """
         if self._context.dry_run():
-            self._log.action(f"Would remove {name}")
+            self._log.action(f"Would remove {display_path(name)}")
             return True
         try:
             self._remove_path(path)
         except OSError as e:
-            self._log.warning(f"Failed to remove {name}")
+            self._log.warning(f"Failed to remove {display_path(name)}")
             self._log.debug(f"OSError: {e!s}")
             return False
-        self._log.action(f"Removing {name}")
+        self._log.action(f"Removing {display_path(name)}")
         return True
 
     def _remove_path(self, path: str) -> None:
