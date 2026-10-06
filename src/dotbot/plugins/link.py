@@ -1,9 +1,11 @@
+import contextlib
 import filecmp
 import glob
 import os
 import shutil
 import stat
 import sys
+import tempfile
 from datetime import UTC, datetime
 from typing import Any
 
@@ -480,7 +482,8 @@ class Link(Plugin):
         # Failure case: The link name exists
         if (
             link_type == "hardlink"
-            and os.stat(link_path).st_ino == os.stat(absolute_target).st_ino
+            and self._exists(absolute_target)
+            and os.path.samefile(link_path, absolute_target)
         ):
             # Idempotent case: The configured hardlink already exists
             self._log.info(f"Link exists {link_name} -> {target_path}")
@@ -594,12 +597,28 @@ class Link(Plugin):
 
     def _copy_file(self, source: str, destination: str) -> None:
         """
-        Copies a file like shutil.copy2, but first removes what is at the
-        destination: a symlink there must not be followed, which would change a
-        file outside of the copy, and a read-only file can't be overwritten.
+        Copies a file like shutil.copy2, but into a temporary file that then
+        replaces the destination, so that a failed copy keeps the destination.
+        A symlink at the destination is replaced, not followed, which would
+        change a file outside of the copy, and so is a read-only file.
         """
-        self._remove_path(destination)
-        shutil.copy2(source, destination)
+        file, temporary = tempfile.mkstemp(
+            prefix=f".{os.path.basename(destination)}.dotbot-",
+            dir=os.path.dirname(destination),
+        )
+        os.close(file)
+        try:
+            shutil.copy2(source, temporary)
+            if os.path.islink(destination) or os.path.isdir(destination):
+                self._remove_path(destination)
+            elif sys.platform == "win32" and os.path.exists(destination):
+                # Windows doesn't replace a read-only file
+                os.chmod(destination, stat.S_IWRITE)
+            os.replace(temporary, destination)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                self._remove_path(temporary)
+            raise
 
     def _copy_directory(self, source: str, destination: str) -> None:
         """

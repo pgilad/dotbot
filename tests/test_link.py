@@ -1617,6 +1617,41 @@ def test_hardlink_already_exists(
     assert "Link exists" in stdout
 
 
+def test_hardlink_ignore_missing_with_existing_file(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a file at a hardlink with a missing target fails with a warning.
+
+    With ignore-missing, the target can be missing, and it can't be compared
+    with the file.
+    """
+
+    with open(os.path.join(home, "f"), "w") as file:
+        file.write("apple")
+    dotfiles.write_config(
+        [
+            {
+                "link": {
+                    "~/f": {
+                        "path": "missing",
+                        "type": "hardlink",
+                        "ignore-missing": True,
+                    }
+                }
+            }
+        ]
+    )
+    with pytest.raises(SystemExit):
+        run_dotbot()
+
+    stderr = capfd.readouterr().err
+    assert "already exists but is a regular file or directory" in stderr
+    assert "An error was encountered" not in stderr
+
+
 def test_broken_symlink_shows_invalid_link_message(
     capsys: pytest.CaptureFixture[str],
     home: str,
@@ -2322,6 +2357,34 @@ def test_link_copy_fails_if_comparison_fails(
         assert file.read() == "pear"
     assert os.path.islink(os.path.join(home, "b"))
     assert f"Failed to compare {os.path.join('~', 'a')}" in capfd.readouterr().err
+
+
+def test_link_copy_failure_keeps_copy(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that a failed update of a copy keeps the copy as it was.
+
+    For example, the disk can be full. No temporary file must stay.
+    """
+
+    dotfiles.write("f", "apple")
+    with open(os.path.join(home, "f"), "w") as file:
+        file.write("pear")
+    dotfiles.write_config(
+        [{"link": {"~/f": {"path": "f", "type": "copy", "force": True}}}]
+    )
+
+    def copy_part(_source: str, destination: str) -> None:
+        with open(destination, "w") as file:
+            file.write("app")
+        raise OSError(28, "No space left on device")
+
+    with patch("shutil.copy2", side_effect=copy_part), pytest.raises(SystemExit):
+        run_dotbot()
+
+    with open(os.path.join(home, "f")) as file:
+        assert file.read() == "pear"
+    assert os.listdir(home) == ["f"]
 
 
 def test_link_copy_glob(
