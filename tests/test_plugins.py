@@ -215,6 +215,33 @@ def test_plugin_duplicate_loading(
         assert file.read() == "1"
 
 
+def test_plugin_files_with_the_same_name(
+    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+) -> None:
+    """Verify that plugin files and classes with the same name all load."""
+
+    plugin_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_same_name.py"
+    )
+    for directive in ("apple", "banana"):
+        os.makedirs(os.path.join(dotfiles.directory, directive))
+        shutil.copy(
+            plugin_file, os.path.join(dotfiles.directory, directive, "plugin.py")
+        )
+    dotfiles.write_config(
+        [
+            {"plugins": ["apple/plugin.py", "banana/plugin.py"]},
+            {"apple": None},
+            {"banana": None},
+        ]
+    )
+    run_dotbot()
+
+    for directive in ("apple", "banana"):
+        with open(os.path.join(home, directive)) as file:
+            assert file.read() == directive
+
+
 def test_plugin_subdirectory(
     home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
 ) -> None:

@@ -1,4 +1,5 @@
 import glob
+import hashlib
 import importlib.util
 import os
 import sys
@@ -29,8 +30,11 @@ def load(path: str) -> list[type[Plugin]]:
 def load_module(module_name: str, path: str) -> ModuleType:
     # Register the module in sys.modules, because some code (such as
     # dataclasses) looks up the module of a class there. The prefix keeps a
-    # plugin file such as "copy.py" from replacing a standard library module.
-    module_name = f"_dotbot_plugin_{module_name}"
+    # plugin file such as "copy.py" from replacing a standard library module,
+    # and the hash of the path keeps plugin files with the same name apart
+    # (load_plugins() also uses the module name to find duplicate plugins).
+    digest = hashlib.sha256(os.fsencode(path)).hexdigest()[:16]
+    module_name = f"_dotbot_plugin_{module_name}_{digest}"
     spec = importlib.util.spec_from_file_location(module_name, path)
     if not spec or not spec.loader:
         msg = f"Unable to load module {module_name} from {path}"
