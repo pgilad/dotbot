@@ -20,6 +20,14 @@ The [`test` command][hatch-test] supports options such as `-a` for testing with 
 
 [hatch-test]: https://hatch.pypa.io/latest/tutorials/testing/overview/
 
+### Running Dotbot from a checkout
+
+You can run Dotbot from your checkout, with your changes, in the default Hatch environment:
+
+```bash
+hatch run dotbot -c path/to/install.conf.yaml --dry-run
+```
+
 ### Isolation
 
 Dotbot executes shell commands and interacts with the filesystem, and the tests exercise this functionality. The tests try to [insulate][dotbot-conftest] themselves from the machine, but if you prefer to run tests in an isolated container using Docker, you can do so with the following:
@@ -67,22 +75,8 @@ You can use [`hatch publish`][hatch-publish] to publish build artifacts to [PyPI
 [hatch-publish]: https://hatch.pypa.io/latest/publish/
 [pypi]: https://pypi.org/
 
-## Updating the pinned uv version
-
-When Python 3.14+ isn't installed, and [uv] isn't installed either or can't install Python 3.14+, [`bin/dotbot`][bin-dotbot] and [`bin/dotbot.ps1`][bin-dotbot-ps1] download a pinned version of uv and verify its SHA-256 checksum. To update the pin, change the version and the checksums in both scripts. You can download the checksums of a uv release with:
-
-```bash
-gh release download <version> -R astral-sh/uv -p 'uv-*.sha256' -D uv-checksums
-```
-
-The scripts use the `apple-darwin` and `unknown-linux-musl` archives (`.tar.gz`) and the `pc-windows-msvc` archives (`.zip`), for both `aarch64` and `x86_64`.
-
-[uv]: https://github.com/astral-sh/uv
-[bin-dotbot]: bin/dotbot
-[bin-dotbot-ps1]: bin/dotbot.ps1
-
 ## Continuous integration
 
-Testing, type checking, and formatting/linting is [checked in CI][ci].
+Testing, type checking, formatting/linting, and the installation of the built wheel as a uv tool are [checked in CI][ci].
 
 [ci]: .github/workflows/ci.yml

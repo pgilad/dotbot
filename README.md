@@ -1,6 +1,6 @@
 # Dotbot [![Build Status](https://github.com/anishathalye/dotbot/actions/workflows/ci.yml/badge.svg)](https://github.com/anishathalye/dotbot/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/dotbot.svg)](https://pypi.org/pypi/dotbot/) [![PyPI - Python version](https://img.shields.io/pypi/pyversions/dotbot.svg)](https://pypi.org/pypi/dotbot/)
 
-Dotbot makes installing your dotfiles as easy as `git clone $url && cd dotfiles && ./install`, even on a freshly installed system!
+Dotbot makes installing your dotfiles as easy as `dotbot -c install.conf.yaml`, even on a freshly installed system!
 
 - [Rationale](#rationale)
 - [Getting Started](#getting-started)
@@ -17,7 +17,7 @@ Dotbot makes installing your dotfiles as easy as `git clone $url && cd dotfiles 
 
 Dotbot is a tool that bootstraps your dotfiles (it's a [Dot]files [bo]o[t]strapper, get it?). It does *less* than you think, because version control systems do more than you think.
 
-Dotbot is designed to be lightweight and self-contained, with no external dependencies and no installation required. Dotbot can also be a drop-in replacement for any other tool you were using to manage your dotfiles, and Dotbot is VCS-agnostic &mdash; it doesn't make any attempt to manage your dotfiles.
+Dotbot is designed to be lightweight, and its only dependency is PyYAML. Dotbot can also be a drop-in replacement for any other tool you were using to manage your dotfiles, and Dotbot is VCS-agnostic &mdash; it doesn't make any attempt to manage your dotfiles.
 
 Dotbot has many [plugins] that extend its functionality, such as:
 
@@ -30,62 +30,47 @@ See [this blog post](https://www.anishathalye.com/2014/08/03/managing-your-dotfi
 
 ## Getting started
 
-### Starting fresh?
+### Installation
 
-Great! You can automate the creation of your dotfiles by using the user-contributed [init-dotfiles][init-dotfiles] script. If you'd rather use a template repository, check out [dotfiles_template][dotfiles-template]. Or, if you're just looking for [some inspiration][inspiration], we've got you covered.
-
-### Integrate with existing dotfiles
-
-The following will help you get set up using Dotbot in just a few steps.
-
-You can create an empty configuration file with:
+Dotbot is a command-line application. Install it with [uv], which also downloads Python 3.14+ if it isn't installed:
 
 ```bash
+uv tool install git+https://github.com/pgilad/dotbot
+```
+
+To install a specific [release][releases], add its tag to the URL, for example `git+https://github.com/pgilad/dotbot@v2.0.0`. To upgrade Dotbot, run `uv tool upgrade dotbot`.
+
+Dotbot isn't on PyPI. The `dotbot` package on PyPI is a different project.
+
+On Windows, Dotbot requires that your account is [allowed to create symbolic links][windows-symlinks].
+
+### Set up your dotfiles
+
+Create an empty configuration file in your dotfiles directory:
+
+```bash
+cd ~/.dotfiles # replace with the path to your dotfiles
 touch install.conf.yaml
 ```
 
-If you're using **Git**, you can add Dotbot as a submodule:
+To get started, you just need to fill in the `install.conf.yaml` and Dotbot will take care of the rest. To help you get started we have [an example](#full-example) config file as well as [configuration documentation](#configuration) for the accepted parameters. Then run Dotbot with your configuration file:
 
 ```bash
-cd ~/.dotfiles # replace with the path to your dotfiles
-git init # initialize repository if needed
-git submodule add https://github.com/anishathalye/dotbot
-git config -f .gitmodules submodule.dotbot.ignore dirty # ignore dirty commits in the submodule
-cp dotbot/tools/git-submodule/install .
+dotbot -c install.conf.yaml
 ```
 
-If you're using **Mercurial**, you can add Dotbot as a subrepo:
+Paths in the configuration file are relative to the *base directory*, which is the directory of the (first) configuration file. You can change the base directory with `-d`.
 
-```bash
-cd ~/.dotfiles # replace with the path to your dotfiles
-hg init # initialize repository if needed
-echo "dotbot = [git]https://github.com/anishathalye/dotbot" > .hgsub
-hg add .hgsub
-git clone https://github.com/anishathalye/dotbot
-cp dotbot/tools/hg-subrepo/install .
+You can also add an `install` script to your dotfiles, so that a new machine needs only uv. The script runs Dotbot without installing it:
+
+```sh
+#!/usr/bin/env sh
+set -e
+cd "$(dirname "$0")"
+exec uvx --from git+https://github.com/pgilad/dotbot dotbot -c install.conf.yaml "$@"
 ```
 
-If you are using PowerShell instead of a POSIX shell, you can use the provided `install.ps1` script instead of `install`. On Windows, Dotbot requires that your account is [allowed to create symbolic links][windows-symlinks].
-
-Dotbot requires Python 3.14+, but you don't need to install it yourself. The install script uses the `python3` or `python` on your PATH if it is new enough. Otherwise, it uses [uv] to find a Python 3.14+ or to download one. If uv isn't installed either, or if it can't install Python 3.14+ (for example, because it is too old), the script first downloads a pinned version of uv, verifies its checksum, and keeps it in `$XDG_CACHE_HOME/dotbot` (`~/.cache/dotbot` by default, or `%LOCALAPPDATA%\dotbot` on Windows). A Python that uv downloads is kept in uv's own data directory, and it doesn't change the `python3` on your PATH.
-
-To get started, you just need to fill in the `install.conf.yaml` and Dotbot will take care of the rest. To help you get started we have [an example](#full-example) config file as well as [configuration documentation](#configuration) for the accepted parameters.
-
-Note: The `install` script is merely a shim that checks out the appropriate version of Dotbot and calls the full Dotbot installer. By default, the script assumes that the configuration is located in `install.conf.yaml` the Dotbot submodule is located in `dotbot`. You can change either of these parameters by editing the variables in the `install` script appropriately.
-
-Setting up Dotbot as a submodule or subrepo locks it on the current version. You can upgrade Dotbot at any point. If using a submodule, run `git submodule update --remote dotbot`, substituting `dotbot` with the path to the Dotbot submodule; be sure to commit your changes before running `./install`, otherwise the old version of Dotbot will be checked out by the install script. If using a subrepo, run `git fetch && git checkout origin/master` in the Dotbot directory.
-
-#### Installation as a command-line program
-
-If you prefer, instead of bundling Dotbot as a submodule with your dotfiles, you can install Dotbot from [PyPI] as a standalone command-line program. Use the tool of your choice, such as `pip` or [`uv`][uv] (which downloads Python 3.14+ if needed):
-
-```bash
-uv tool install dotbot
-```
-
-Some systems include Dotbot in their native package manager, such as [Homebrew][homebrew-dotbot] and [Arch Linux][arch-dotbot], so for example, you can also install it with `brew install dotbot`.
-
-With Dotbot installed as a command-line program on your system, you can invoke Dotbot with `dotbot -c <path to configuration file>`.
+Add a release tag to the URL to always use the same version of Dotbot.
 
 ### Full example
 
@@ -117,12 +102,12 @@ The configuration file is typically written in YAML, but it can also be written 
 
 ## Installing Your Dotfiles
 
-To install your dotfiles on a new machine or after updates:
+To install your dotfiles on a new machine, [install Dotbot](#installation), and then:
 
 ```bash
 git clone <your-dotfiles-repo-url> ~/.dotfiles
 cd ~/.dotfiles
-./install
+dotbot -c install.conf.yaml
 ```
 
 To update an existing installation:
@@ -130,7 +115,7 @@ To update an existing installation:
 ```bash
 cd ~/.dotfiles
 git pull
-./install
+dotbot -c install.conf.yaml
 ```
 
 ## Configuration
@@ -435,23 +420,23 @@ dotbot --plugin dotbot-plugins/dotbot-brew/ --plugin dotbot-plugins/custom_plugi
 
 Paths specified this way are interpreted relative to the _working directory_ where `dotbot` is invoked.
 
-It is recommended that these options are added directly to your `install` script for consistency across installations.
+If you use an `install` script, it is recommended that you add these options to it for consistency across installations.
 
 ## Command-line arguments
 
-Dotbot takes a number of command-line arguments; you can run Dotbot with `--help`, for example, by running `./install --help`, to see the full list of options. Here, we highlight a couple that are particularly interesting.
+Dotbot takes a number of command-line arguments; you can run `dotbot --help` to see the full list of options. Here, we highlight a couple that are particularly interesting.
 
 ### `--dry-run`
 
-You can call `./install --dry-run`, and Dotbot will explain what it _would_ do, without actually making any changes. This can be helpful for safely testing your configuration. Plugins that don't support dry-run will be skipped.
+You can call `dotbot -c install.conf.yaml --dry-run`, and Dotbot will explain what it _would_ do, without actually making any changes. This can be helpful for safely testing your configuration. Plugins that don't support dry-run will be skipped.
 
 ### `--only`
 
-You can call `./install --only [list of directives]`, such as `./install --only link`, and Dotbot will only run those sections of the config file.
+You can call `dotbot -c install.conf.yaml --only [list of directives]`, such as `--only link`, and Dotbot will only run those sections of the config file.
 
 ### `--except`
 
-You can call `./install --except [list of directives]`, such as `./install --except shell`, and Dotbot will run all the sections of the config file except the ones listed.
+You can call `dotbot -c install.conf.yaml --except [list of directives]`, such as `--except shell`, and Dotbot will run all the sections of the config file except the ones listed.
 
 ## Wiki
 
@@ -465,13 +450,8 @@ Do you have a feature request, bug report, or patch? Great! See [CONTRIBUTING.md
 
 Copyright (c) Anish Athalye. Released under the MIT License. See [LICENSE.md][license] for details.
 
-[PyPI]: https://pypi.org/project/dotbot/
-[uv]: https://github.com/astral-sh/uv
-[homebrew-dotbot]: https://formulae.brew.sh/formula/dotbot
-[arch-dotbot]: https://aur.archlinux.org/packages/dotbot
-[init-dotfiles]: https://github.com/Vaelatern/init-dotfiles
-[dotfiles-template]: https://github.com/anishathalye/dotfiles_template
-[inspiration]: https://github.com/anishathalye/dotbot/wiki/Users
+[uv]: https://docs.astral.sh/uv/
+[releases]: https://github.com/pgilad/dotbot/releases
 [windows-symlinks]: https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/create-symbolic-links
 [json2yaml]: https://www.json2yaml.com/
 [plugins]: https://github.com/anishathalye/dotbot/wiki/Plugins
