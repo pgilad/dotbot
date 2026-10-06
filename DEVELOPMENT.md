@@ -55,10 +55,11 @@ hatch run types:check
 You can run the [Ruff][ruff] formatter and linter with:
 
 ```bash
-hatch fmt
+hatch check fmt --fix
+hatch check code --fix
 ```
 
-This will automatically make [safe fixes][fix-safety] to your code. If you want to only check your files without making modifications, run `hatch fmt --check`.
+This will automatically make [safe fixes][fix-safety] to your code. If you want to only check your files without making modifications, run the commands without `--fix`, as CI does.
 
 [ruff]: https://github.com/astral-sh/ruff
 [fix-safety]: https://docs.astral.sh/ruff/linter/#fix-safety
@@ -67,13 +68,25 @@ This will automatically make [safe fixes][fix-safety] to your code. If you want 
 
 You can use [`hatch build`][hatch-build] to create build artifacts, a [source distribution ("sdist")][sdist] and a [built distribution ("wheel")][bdist].
 
-You can use [`hatch publish`][hatch-publish] to publish build artifacts to [PyPI][pypi].
+Dotbot isn't published to PyPI, because the name `dotbot` on PyPI belongs to a different project. The [releases] on GitHub have the build artifacts.
 
 [hatch-build]: https://hatch.pypa.io/latest/build/
 [sdist]: https://packaging.python.org/en/latest/glossary/#term-Source-Distribution-or-sdist
 [bdist]: https://packaging.python.org/en/latest/glossary/#term-Built-Distribution
-[hatch-publish]: https://hatch.pypa.io/latest/publish/
-[pypi]: https://pypi.org/
+[releases]: https://github.com/pgilad/dotbot/releases
+
+## Releasing
+
+1. Set the version in [`src/dotbot/__about__.py`][about].
+2. For a new minor or major version, such as 2.1.0, add an entry for it (`- v2.1`) at the top of [`CHANGELOG.md`][changelog]. A patch version doesn't need an entry.
+3. Commit the changes, and push them to `main`.
+4. Create a tag for the version, such as `v2.1.0`, and push it.
+
+The [release workflow][release] then runs the tests, makes sure that the tag agrees with the version and that the changelog has an entry for a minor or major version, and creates a GitHub release. The release has the changelog entry, the generated notes, the wheel, and the sdist.
+
+[about]: src/dotbot/__about__.py
+[changelog]: CHANGELOG.md
+[release]: .github/workflows/release.yml
 
 ## Continuous integration
 

@@ -1,20 +1,26 @@
 [build-system]
-requires = ["hatchling"]
+# 1.27 supports the license expression and license-files (PEP 639)
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "dotbot"
 authors = [
-  { name = "Anish Athalye", email = "me@anishathalye.com" },
+  { name = "Gilad Peleg" },
+  { name = "Anish Athalye" },
 ]
 description = "A tool that bootstraps your dotfiles"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE.md"]
 requires-python = ">=3.14"
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
   "Topic :: Utilities",
 ]
 keywords = ["dotfiles"]
@@ -27,9 +33,10 @@ dependencies = [
 dotbot = "dotbot.cli:main"
 
 [project.urls]
-homepage = "https://github.com/anishathalye/dotbot"
-repository = "https://github.com/anishathalye/dotbot.git"
-issues = "https://github.com/anishathalye/dotbot/issues"
+homepage = "https://github.com/pgilad/dotbot"
+repository = "https://github.com/pgilad/dotbot.git"
+issues = "https://github.com/pgilad/dotbot/issues"
+changelog = "https://github.com/pgilad/dotbot/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "src/dotbot/__about__.py"

@@ -20,7 +20,7 @@ Want to hack on Dotbot? Awesome!
 
 If there are [open issues][issues], you're more than welcome to work on those - this is probably the best way to contribute to Dotbot. If you have your own ideas, that's great too! In that case, before working on substantial changes to the code base, it is *highly recommended* that you first [open an issue][issue] describing what you intend to work on.
 
-**Patches are generally submitted as pull requests.** Patches are also [accepted over email][email].
+**Patches are submitted as [pull requests][pull-requests].**
 
 Any changes to the code base should follow the style and coding conventions used in the rest of the project. The version history should be clean, and commit messages should be descriptive and [properly formatted][commit-messages]. It's recommended that you add unit tests to demonstrate that the bug is fixed (or that the feature works).
 
@@ -28,11 +28,11 @@ See the [Dotbot development guide][development] to learn how to run the tests, t
 
 ---
 
-If you have any questions about anything, feel free to [ask][email]!
+If you have any questions about anything, feel free to [open an issue][issue]!
 
-[issue]: https://github.com/anishathalye/dotbot/issues/new
-[issues]: https://github.com/anishathalye/dotbot/issues
-[fork]: https://github.com/anishathalye/dotbot/fork
-[email]: mailto:me@anishathalye.com
-[commit-messages]: http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
+[issue]: https://github.com/pgilad/dotbot/issues/new
+[issues]: https://github.com/pgilad/dotbot/issues
+[fork]: https://github.com/pgilad/dotbot/fork
+[pull-requests]: https://github.com/pgilad/dotbot/pulls
+[commit-messages]: https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 [development]: DEVELOPMENT.md

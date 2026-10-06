@@ -1,4 +1,4 @@
-# Dotbot [![Build Status](https://github.com/anishathalye/dotbot/actions/workflows/ci.yml/badge.svg)](https://github.com/anishathalye/dotbot/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/dotbot.svg)](https://pypi.org/pypi/dotbot/) [![PyPI - Python version](https://img.shields.io/pypi/pyversions/dotbot.svg)](https://pypi.org/pypi/dotbot/)
+# Dotbot [![Build Status](https://github.com/pgilad/dotbot/actions/workflows/ci.yml/badge.svg)](https://github.com/pgilad/dotbot/actions/workflows/ci.yml)
 
 Dotbot makes installing your dotfiles as easy as `dotbot -c install.conf.yaml`, even on a freshly installed system!
 
@@ -9,7 +9,6 @@ Dotbot makes installing your dotfiles as easy as `dotbot -c install.conf.yaml`, 
 - [Directives](#directives) ([Link](#link), [Create](#create), [Shell](#shell), [Clean](#clean), [Defaults](#defaults))
 - [Plugins](#plugins)
 - [Command-line Arguments](#command-line-arguments)
-- [Wiki][wiki]
 
 ---
 
@@ -19,14 +18,11 @@ Dotbot is a tool that bootstraps your dotfiles (it's a [Dot]files [bo]o[t]strapp
 
 Dotbot is designed to be lightweight, and its only dependency is PyYAML. Dotbot can also be a drop-in replacement for any other tool you were using to manage your dotfiles, and Dotbot is VCS-agnostic &mdash; it doesn't make any attempt to manage your dotfiles.
 
-Dotbot has many [plugins] that extend its functionality, such as:
+Dotbot has many plugins that extend its functionality, such as:
 
 - Secrets management: [dotbot-age](https://github.com/fcatuhe/dotbot-age), [dotbot-gitcrypt](https://gitlab.com/gnfzdz/dotbot-gitcrypt), &mldr;
 - Package management: [dotbot-brew](https://github.com/d12frosted/dotbot-brew), [dotbot-apt](https://github.com/bryant1410/dotbot-apt), [dotbot-yum](https://gitlab.com/flyingchipmunk/dotbot-yum), &mldr;
 - OS and application configuration: [crontab-dotbot](https://github.com/fundor333/crontab-dotbot), [dotbot-firefox](https://github.com/kurtmckee/dotbot-firefox), &mldr;
-- &mldr; and [more][plugins]!
-
-See [this blog post](https://www.anishathalye.com/2014/08/03/managing-your-dotfiles/) or more resources on the [tutorials page](https://github.com/anishathalye/dotbot/wiki/Tutorials) for more detailed explanations of how to organize your dotfiles.
 
 ## Getting started
 
@@ -396,8 +392,6 @@ Plugins should declare support for dry-run with `supports_dry_run = True`, and i
 
 All built-in Dotbot directives are written as plugins that are loaded by default, so those can be used as a reference when writing custom plugins.
 
-See [here][plugins] for a current list of third-party plugins.
-
 #### Loading plugins via configuration
 
 You can specify plugins in your configuration file as an array of files or directories (containing plugins) to load:
@@ -438,23 +432,19 @@ You can call `dotbot -c install.conf.yaml --only [list of directives]`, such as 
 
 You can call `dotbot -c install.conf.yaml --except [list of directives]`, such as `--except shell`, and Dotbot will run all the sections of the config file except the ones listed.
 
-## Wiki
-
-Check out the [Dotbot wiki][wiki] for more information, tips and tricks, user-contributed plugins, and more.
-
 ## Contributing
 
 Do you have a feature request, bug report, or patch? Great! See [CONTRIBUTING.md][contributing] for information on what you can do about that.
 
 ## License
 
-Copyright (c) Anish Athalye. Released under the MIT License. See [LICENSE.md][license] for details.
+Copyright (c) Anish Athalye and Gilad Peleg. Released under the MIT License. See [LICENSE.md][license] for details.
+
+This project started as a fork of [Dotbot](https://github.com/anishathalye/dotbot) by Anish Athalye.
 
 [uv]: https://docs.astral.sh/uv/
 [releases]: https://github.com/pgilad/dotbot/releases
 [windows-symlinks]: https://learn.microsoft.com/en-us/windows/security/threat-protection/security-policy-settings/create-symbolic-links
 [json2yaml]: https://www.json2yaml.com/
-[plugins]: https://github.com/anishathalye/dotbot/wiki/Plugins
-[wiki]: https://github.com/anishathalye/dotbot/wiki
 [contributing]: CONTRIBUTING.md
 [license]: LICENSE.md
