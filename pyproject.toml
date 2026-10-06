@@ -66,8 +66,14 @@ strict = true
 python_version = "3.14"
 
 [tool.ruff]
-extend-exclude = [
-  "lib/*.py"
-]
+# the default of Hatch is 120
+line-length = 88
 # keep the syntax up to date with the minimum supported version (pyupgrade)
 lint.extend-select = ["UP"]
+lint.ignore = [
+  # Messenger isn't a logging.Logger
+  "G004",
+  "TRY400",
+  # imports that only annotations use can stay at the top of the module
+  "TC",
+]

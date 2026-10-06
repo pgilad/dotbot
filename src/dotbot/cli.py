@@ -165,9 +165,8 @@ def main() -> None:
             # default to directory of first config file
             base_directory = os.path.dirname(os.path.abspath(options.config_file[0]))
         os.chdir(base_directory)
-        dotbot.dispatcher._all_plugins = (
-            plugins  # for backwards compatibility, see dispatcher.py  # noqa: SLF001
-        )
+        # for backwards compatibility, see dispatcher.py
+        dotbot.dispatcher._all_plugins = plugins  # noqa: SLF001
         dispatcher = Dispatcher(
             base_directory,
             only=options.only,
@@ -183,10 +182,10 @@ def main() -> None:
             msg = "Some tasks were not executed successfully"
             raise DispatchError(msg)  # noqa: TRY301
     except (ReadingError, DispatchError) as e:
-        log.error(str(e))  # noqa: TRY400
+        log.error(str(e))
         sys.exit(1)
     except KeyboardInterrupt:
-        log.error("Operation aborted")  # noqa: TRY400
+        log.error("Operation aborted")
         sys.exit(1)
 
 

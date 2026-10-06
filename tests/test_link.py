@@ -2,9 +2,9 @@ import os
 import pathlib
 import stat
 import sys
-from datetime import datetime, timedelta, UTC
-from typing import Any
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import patch
 
 import pytest

@@ -5,9 +5,9 @@ import os
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable, Generator
 from shutil import rmtree
 from typing import Any
-from collections.abc import Callable, Generator
 from unittest import mock
 
 import pytest

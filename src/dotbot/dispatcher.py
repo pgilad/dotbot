@@ -74,8 +74,9 @@ class Dispatcher:
                             # this mutates self._context._plugins; we don't add a setter method
                             # to Context because we don't want plugins to call it
                             new_plugins = load_plugins(
-                                [plugin_path], self._context._plugins
-                            )  # noqa: SLF001
+                                [plugin_path],
+                                self._context._plugins,  # noqa: SLF001
+                            )
                             for plugin_class in new_plugins:
                                 self._plugins.append(plugin_class(self._context))
                         except Exception as err:  # noqa: BLE001

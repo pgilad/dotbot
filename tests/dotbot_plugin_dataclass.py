@@ -25,7 +25,7 @@ class Dataclass(dotbot.Plugin):
     def can_handle(self, directive: str) -> bool:
         return directive == "plugin_dataclass"
 
-    def handle(self, directive: str, data: Any) -> bool:
+    def handle(self, directive: str, _data: Any) -> bool:
         if directive != "plugin_dataclass":
             msg = f"Dataclass cannot handle directive {directive}"
             raise ValueError(msg)

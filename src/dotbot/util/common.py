@@ -30,7 +30,7 @@ def shell_command(
         stdin = None if enable_stdin else devnull_r
         stdout = None if enable_stdout else devnull_w
         stderr = None if enable_stderr else devnull_w
-        return subprocess.call(  # noqa: S602
+        return subprocess.call(
             command if executable is None else [executable, "-c", command],
             shell=executable is None,
             stdin=stdin,

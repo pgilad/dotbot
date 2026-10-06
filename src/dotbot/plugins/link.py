@@ -4,7 +4,7 @@ import os
 import shutil
 import stat
 import sys
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from dotbot.plugin import Plugin

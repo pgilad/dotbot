@@ -20,7 +20,7 @@ class Messenger(metaclass=Singleton):
     def log(self, level: Level, message: str) -> None:
         if level >= self._level:
             # flush, so that messages stay in order with the output of shell commands
-            print(  # noqa: T201
+            print(
                 f"{self._color(level)}{self._prefix(level)}{message}{self._reset()}",
                 file=sys.stderr if level >= Level.WARNING else sys.stdout,
                 flush=True,
