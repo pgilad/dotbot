@@ -64,6 +64,20 @@ This will automatically make [safe fixes][fix-safety] to your code. If you want 
 [ruff]: https://github.com/astral-sh/ruff
 [fix-safety]: https://docs.astral.sh/ruff/linter/#fix-safety
 
+## Demo
+
+The GIF and the screenshot in the README are recorded with [VHS] (`brew install vhs`). After a change to the output of Dotbot, record them again from the root of the repository:
+
+```bash
+vhs docs/demo/demo.tape
+vhs docs/demo/dry-run.tape
+```
+
+The tapes run Dotbot from your checkout, in a temporary home directory that [`docs/demo/setup.sh`][demo-setup] makes. They need uv and git.
+
+[VHS]: https://github.com/charmbracelet/vhs
+[demo-setup]: docs/demo/setup.sh
+
 ## Packaging
 
 You can use [`hatch build`][hatch-build] to create build artifacts, a [source distribution ("sdist")][sdist] and a [built distribution ("wheel")][bdist].

@@ -41,6 +41,10 @@ changelog = "https://github.com/pgilad/dotbot/blob/main/CHANGELOG.md"
 [tool.hatch.version]
 path = "src/dotbot/__about__.py"
 
+[tool.hatch.build.targets.sdist]
+# the recordings are only for the README on GitHub
+exclude = ["/docs/demo"]
+
 [tool.hatch.envs.default]
 python = "3.14"
 installer = "uv"
