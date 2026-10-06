@@ -1,9 +1,18 @@
 name: CI
 on:
   push:
+    branches:
+      - main
   pull_request:
   schedule:
     - cron: "0 8 * * 6"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # keep a run for each commit on main
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     env:
@@ -16,31 +25,50 @@ jobs:
           - "3.14"
           - "3.15"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     name: "Test: Python ${{ matrix.python }} on ${{ matrix.os }}"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           submodules: recursive
-      - uses: pypa/hatch@install
-      - run: hatch test -v --include python=${{ matrix.python }} tests
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - run: uvx hatch test -v --include python=${{ matrix.python }} tests
   typecheck:
     name: Type check
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: pypa/hatch@install
-      - run: hatch run types:check
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - run: uvx hatch run types:check
   fmt:
     name: Format
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: pypa/hatch@install
-      - run: hatch check fmt
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - run: uvx hatch check fmt
   lint:
     name: Lint
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: pypa/hatch@install
-      - run: hatch check code
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - run: uvx hatch check code

@@ -5,6 +5,9 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     env:
@@ -29,22 +32,29 @@ jobs:
             platform: windows
             arch: arm64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     name: "Test: ${{ matrix.platform }}-${{ matrix.arch }}"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           submodules: recursive
-      - uses: pypa/hatch@install
-      - run: hatch test
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - run: uvx hatch test
 
   github-release:
     needs: test
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     name: Create GitHub Release
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # the changelog has an entry for each minor version (v2.0 for v2.0.0), so
       # a patch release gets only the generated notes
       - name: Get the release notes from the changelog
@@ -60,8 +70,10 @@ jobs:
           ' CHANGELOG.md > release-notes.md
           cat release-notes.md
       - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          body_path: release-notes.md
-          # added after the body
-          generate_release_notes: true
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        # the generated notes are added after the notes from the changelog
+        run: >-
+          gh release create "$GITHUB_REF_NAME" --verify-tag
+          --title "$GITHUB_REF_NAME" --notes-file release-notes.md --generate-notes
