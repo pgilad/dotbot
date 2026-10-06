@@ -46,4 +46,5 @@ class Context:
         return copy.copy(self._plugins)
 
     def dry_run(self) -> bool:
-        return bool(self._options.dry_run)
+        # a Dispatcher that a plugin makes can have no options
+        return bool(getattr(self._options, "dry_run", False))

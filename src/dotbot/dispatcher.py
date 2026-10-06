@@ -37,7 +37,7 @@ class Dispatcher:
         self._only = only
         self._skip = skip
         self._exit = exit_on_failure
-        self._dry_run: bool = options is not None and bool(options.dry_run)
+        self._dry_run = self._context.dry_run()
 
     def _setup_context(
         self,

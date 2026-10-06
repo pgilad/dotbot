@@ -6,6 +6,9 @@ from collections.abc import Callable
 
 import pytest
 
+import dotbot
+from dotbot.dispatcher import Dispatcher
+from dotbot.plugins import Link, Shell
 from tests.conftest import Dotfiles
 
 
@@ -399,3 +402,79 @@ def test_python_m_dotbot() -> None:
         check=True,
     )
     assert result.stdout.startswith("Dotbot version")
+
+
+def test_version_outside_of_checkout(root: str) -> None:
+    """Verify that --version shows a git commit only for a checkout of Dotbot.
+
+    An installed Dotbot can be in the git repository of something else, such
+    as a home directory under version control.
+    """
+
+    if shutil.which("git") is None:
+        pytest.skip("git is unavailable")
+    repository = os.path.join(root, "repository")
+    site_packages = os.path.join(repository, "lib", "site-packages")
+    shutil.copytree(
+        os.path.dirname(os.path.abspath(dotbot.__file__)),
+        os.path.join(site_packages, "dotbot"),
+    )
+    git_config = os.path.join(root, "gitconfig")
+    with open(git_config, "w"):
+        pass
+    env = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": git_config,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "PYTHONPATH": site_packages,
+    }
+    git = ["git", "-c", "user.name=Dotbot", "-c", "user.email=dotbot@example.com"]
+    subprocess.run([*git, "init", "--quiet", repository], check=True, env=env)
+    subprocess.run(
+        [*git, "-C", repository, "commit", "--quiet", "--allow-empty", "-m", "Commit"],
+        check=True,
+        env=env,
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "dotbot", "--version"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    )
+    assert result.stdout == f"Dotbot version {dotbot.__version__}\n"
+
+
+def test_nonexistent_base_directory(
+    capfd: pytest.CaptureFixture[str],
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a nonexistent base directory is an error, not an exception."""
+
+    dotfiles.write_config([])
+    with pytest.raises(SystemExit) as excinfo:
+        run_dotbot("-d", os.path.join(dotfiles.directory, "nonexistent"))
+
+    assert excinfo.value.code == 1
+    assert "Could not use base directory:" in capfd.readouterr().err
+
+
+def test_dispatcher_without_options(home: str, dotfiles: Dotfiles) -> None:
+    """Verify that the built-in plugins work in a Dispatcher without options.
+
+    The options of a Dispatcher are optional, and plugins can make their own
+    Dispatcher.
+    """
+
+    dotfiles.write("f", "apple")
+    dispatcher = Dispatcher(dotfiles.directory, plugins=[Link, Shell])
+
+    assert dispatcher.dispatch(
+        [{"link": {"~/.f": "f"}}, {"shell": ["echo banana > g"]}]
+    )
+    with open(os.path.join(home, ".f")) as file:
+        assert file.read() == "apple"
+    with open(os.path.join(dotfiles.directory, "g")) as file:
+        assert file.read().strip() == "banana"

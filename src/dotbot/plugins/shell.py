@@ -40,7 +40,7 @@ class Shell(Plugin):
             if isinstance(item, dict):
                 for key in unknown_options(item, self._options):
                     self._log.warning(f"Unknown option '{key}' for shell command")
-                cmd = item["command"]
+                cmd = item.get("command")
                 msg = item.get("description", None)
                 stdin = item.get("stdin", stdin)
                 stdout = item.get("stdout", stdout)
@@ -48,11 +48,15 @@ class Shell(Plugin):
                 quiet = item.get("quiet", quiet)
                 executable = item.get("executable", executable)
             elif isinstance(item, list):
-                cmd = item[0]
+                cmd = item[0] if item else None
                 msg = item[1] if len(item) > 1 else None
             else:
                 cmd = item
                 msg = None
+            if cmd is None:
+                success = False
+                self._log.warning(f"Missing command for shell entry {item!r}")
+                continue
             prefix = "Would run command " if self._context.dry_run() else ""
             if quiet:
                 if msg is not None:
@@ -86,7 +90,7 @@ class Shell(Plugin):
     def _get_option_overrides(self) -> dict[str, bool]:
         ret = {}
         options = self._context.options()
-        if options.verbose > 1:
+        if getattr(options, "verbose", 0) > 1:
             ret["stderr"] = True
             ret["stdout"] = True
             if not self._has_shown_override_message:

@@ -106,6 +106,32 @@ def read_config(config_files: list[str]) -> Any:
     return reader.get_config()
 
 
+def git_commit() -> str | None:
+    """
+    Returns the commit of the checkout of Dotbot that runs, or None.
+
+    An installed Dotbot isn't in a checkout, but it can be in the git
+    repository of something else, such as a home directory under version
+    control.
+    """
+    # the directory that has src/dotbot/cli.py in a checkout
+    project_directory = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    try:
+        output = subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel", "HEAD"],  # noqa: S607
+            cwd=project_directory,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        toplevel, commit = output.splitlines()
+        in_checkout = os.path.samefile(toplevel, project_directory)
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return None
+    return commit if in_checkout else None
+
+
 def main() -> None:
     log = Messenger()
     try:
@@ -113,16 +139,8 @@ def main() -> None:
         add_options(parser)
         options = parser.parse_args()
         if options.version:
-            try:
-                with open(os.devnull) as devnull:
-                    git_hash = subprocess.check_output(
-                        ["git", "rev-parse", "HEAD"],  # noqa: S607
-                        cwd=os.path.dirname(os.path.abspath(__file__)),
-                        stderr=devnull,
-                    ).decode("ascii")
-                hash_msg = f" (git {git_hash[:10]})"
-            except (OSError, subprocess.CalledProcessError):
-                hash_msg = ""
+            commit = git_commit()
+            hash_msg = f" (git {commit[:10]})" if commit else ""
             print(f"Dotbot version {dotbot.__version__}{hash_msg}")  # noqa: T201
             sys.exit(0)
         if options.super_quiet or options.quiet:
@@ -164,7 +182,12 @@ def main() -> None:
         else:
             # default to directory of first config file
             base_directory = os.path.dirname(os.path.abspath(options.config_file[0]))
-        os.chdir(base_directory)
+        try:
+            os.chdir(base_directory)
+        except OSError as e:
+            msg = string.indent_lines(str(e))
+            log.error(f"Could not use base directory:\n{msg}")
+            sys.exit(1)
         # for backwards compatibility, see dispatcher.py
         dotbot.dispatcher._all_plugins = plugins  # noqa: SLF001
         dispatcher = Dispatcher(

@@ -407,16 +407,44 @@ def test_shell_exception_is_reported(
     The action must not be reported as not handled.
     """
 
-    dotfiles.write_config([{"shell": [{"description": "no command"}]}])
+    dotfiles.write_config([{"shell": 5}])
     with pytest.raises(SystemExit):
         run_dotbot()
 
     stderr = capfd.readouterr().err
     assert (
-        "An error was encountered while executing action shell: KeyError: 'command'"
-        in stderr
+        "An error was encountered while executing action shell: "
+        "TypeError: 'int' object is not iterable" in stderr
     )
     assert "not handled" not in stderr
+
+
+def test_shell_entry_without_command(
+    capfd: pytest.CaptureFixture[str],
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that an entry without a command fails, and the others still run."""
+
+    dotfiles.write_config(
+        [
+            {
+                "shell": [
+                    {"description": "nothing to run"},
+                    [],
+                    None,
+                    {"command": "echo apple", "stdout": True},
+                ]
+            }
+        ]
+    )
+    with pytest.raises(SystemExit):
+        run_dotbot()
+
+    output = capfd.readouterr()
+    for entry in ("{'description': 'nothing to run'}", "[]", "None"):
+        assert f"Missing command for shell entry {entry}\n" in output.err
+    assert any(line.startswith("apple") for line in output.out.splitlines())
 
 
 def test_shell_output_order_with_pipe(home: str, dotfiles: Dotfiles) -> None:
