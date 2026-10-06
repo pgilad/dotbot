@@ -504,7 +504,7 @@ def test_summary(
     ("arguments", "summary"),
     [
         ([], "Failed (1 error, 1 action)"),
-        (["-x"], "Stopped after the first failure (1 error)"),
+        (["-x"], "Stopped after the first failed directive (1 error)"),
     ],
 )
 def test_summary_failure(

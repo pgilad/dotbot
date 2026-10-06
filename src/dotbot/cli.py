@@ -222,7 +222,7 @@ def main() -> None:
             log.action(f"{done} ({summary(log)})")
         else:
             failed = (
-                "Stopped after the first failure"
+                "Stopped after the first failed directive"
                 if options.exit_on_failure
                 else "Failed"
             )
