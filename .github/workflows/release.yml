@@ -55,6 +55,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Check that the tag matches the version
+        run: |
+          version=$(uvx hatch version)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::The tag $GITHUB_REF_NAME doesn't match the version $version in src/dotbot/__about__.py"
+            exit 1
+          fi
       # the changelog has an entry for each minor version (v2.0 for v2.0.0), so
       # a patch release gets only the generated notes
       - name: Get the release notes from the changelog
@@ -68,12 +78,18 @@ jobs:
             found && /^- / { exit }
             found { sub(/^    /, ""); print }
           ' CHANGELOG.md > release-notes.md
+          if [ -n "$version" ] && [ ! -s release-notes.md ]; then
+            echo "::error::CHANGELOG.md has no entry for $version"
+            exit 1
+          fi
           cat release-notes.md
+      - name: Build the wheel and the source distribution
+        run: uvx hatch build
       - name: Create Release
         env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         # the generated notes are added after the notes from the changelog
         run: >-
-          gh release create "$GITHUB_REF_NAME" --verify-tag
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag
           --title "$GITHUB_REF_NAME" --notes-file release-notes.md --generate-notes
