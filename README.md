@@ -177,7 +177,7 @@ With `type: copy`, Dotbot copies the target instead of linking it. This is usefu
 - If the copy exists and differs from the target, Dotbot keeps it, so that local changes aren't lost. With `force: true`, Dotbot updates the copy; with `backup: true`, Dotbot first moves the old copy to a backup and then copies the target.
 - Dotbot copies a directory file by file, and keeps files that exist only in the copy. When Dotbot updates a copy, it replaces the symbolic links in the copy instead of writing through them.
 - If a symbolic link is where the copy should be, Dotbot replaces it only with `relink: true` or `force: true`.
-- If a file is where a directory copy should be, or a directory is where a file copy should be, Dotbot shows a warning and keeps it, unless `force: true` or `backup: true` is set.
+- If a file is where a directory copy should be, or a directory is where a file copy should be, Dotbot shows an error and keeps it, unless `force: true` or `backup: true` is set.
 
 The `relative` and `canonicalize` options have no effect on copies.
 
@@ -386,7 +386,7 @@ Defaults are specified as a dictionary mapping action names to settings, which a
 
 ### Plugins
 
-Dotbot also supports custom directives implemented by plugins. Plugins are implemented as subclasses of `dotbot.Plugin`, so they must implement `can_handle()` and `handle()`. The `can_handle()` method should return `True` if the plugin can handle an action with the given name. The `handle()` method should do something and return whether or not it completed successfully.
+Dotbot also supports custom directives implemented by plugins. Plugins are implemented as subclasses of `dotbot.Plugin`, so they must implement `can_handle()` and `handle()`. The `can_handle()` method should return `True` if the plugin can handle an action with the given name. The `handle()` method should do something and return whether or not it completed successfully. When it fails, it should log an error that tells what failed, with `self._log.error()`; otherwise, Dotbot logs `Action <directive> failed`.
 
 Plugins should declare support for dry-run with `supports_dry_run = True`, and implement this support by logging what the plugin _would_ do (without doing it) when `Context.dry_run()` is set. Plugins that don't explicitly declare support for dry-run will be skipped when Dotbot is run with `--dry-run`.
 

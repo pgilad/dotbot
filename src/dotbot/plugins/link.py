@@ -65,7 +65,7 @@ class Link(Plugin):
         # Validate the default link type before looping.
         link_type = defaults.get("type", "symlink")
         if link_type not in self._types:
-            self._log.warning(f"The default link type is not recognized: '{link_type}'")
+            self._log.error(f"The default link type is not recognized: '{link_type}'")
             return False
 
         for link_name, target in links.items():
@@ -99,7 +99,7 @@ class Link(Plugin):
                 link_type = target.get("type", link_type)
                 if link_type not in self._types:
                     msg = f"The link type is not recognized: '{link_type}'"
-                    self._log.warning(msg)
+                    self._log.error(msg)
                     success = False
                     continue
                 force = target.get("force", force)
@@ -193,7 +193,7 @@ class Link(Plugin):
                     # if the file doesn't exist and force is True, we don't
                     # want to remove the original (this is tested by test_link_force_leaves_when_nonexistent)
                     success = False
-                    self._log.warning(
+                    self._log.error(
                         f"Nonexistent target {display_path(link_name)} -> {display_path(path)}"
                     )
                     continue
@@ -232,10 +232,6 @@ class Link(Plugin):
                     link_type=link_type,
                     assume_gone=(did_backup or did_delete),
                 )
-        if success:
-            self._log.info("All links have been set up")
-        else:
-            self._log.error("Some links were not successfully set up")
         return success
 
     def _test_success(self, command: str) -> bool:
@@ -323,7 +319,7 @@ class Link(Plugin):
             try:
                 os.makedirs(parent)
             except OSError as e:
-                self._log.warning(f"Failed to create directory {display_path(parent)}")
+                self._log.error(f"Failed to create directory {display_path(parent)}")
                 self._log.debug(f"OSError: {e!s}")
                 success = False
             else:
@@ -346,7 +342,7 @@ class Link(Plugin):
                     os.path.abspath(os.path.expanduser(backup_name)),
                 )
             except OSError as e:
-                self._log.warning(
+                self._log.error(
                     f"Failed to backup file {display_path(path)} to {display_path(backup_name)}"
                 )
                 self._log.debug(f"OSError: {e!s}")
@@ -381,7 +377,7 @@ class Link(Plugin):
             # Special case: The path is not a symlink but resolves to the target anyway.
             # Deleting the path would actually delete the target.
             # This may happen if a parent directory is a symlink.
-            self._log.warning(
+            self._log.error(
                 f"{display_path(path)} appears to be the same file as {display_path(target)}."
             )
             return False, False
@@ -408,7 +404,7 @@ class Link(Plugin):
                             os.remove(fullpath)
                             removed = True
                 except OSError as e:
-                    self._log.warning(f"Failed to remove {display_path(path)}")
+                    self._log.error(f"Failed to remove {display_path(path)}")
                     self._log.debug(f"OSError: {e!s}")
                     success = False
                 else:
@@ -470,7 +466,7 @@ class Link(Plugin):
                 else:  # link_type == "hardlink"
                     os.link(absolute_target, link_path)
             except OSError as e:
-                self._log.warning(
+                self._log.error(
                     f"Linking failed {display_path(link_name)} -> {display_path(target_path)}"
                 )
                 self._log.debug(f"OSError: {e!s}")
@@ -494,12 +490,12 @@ class Link(Plugin):
                 # The existing symlink isn't pointing at the target.
                 # Distinguish between an incorrect symlink and a broken ("invalid") symlink.
                 terminology = "Incorrect" if self._exists(link_name) else "Invalid"
-                self._log.warning(
+                self._log.error(
                     f"{terminology} link {display_path(link_name)} -> {display_path(self._link_target(link_name))}"
                 )
                 return False
 
-            self._log.warning(
+            self._log.error(
                 f"{display_path(link_name)} already exists but is a symbolic link, not a hard link"
             )
             return False
@@ -516,7 +512,7 @@ class Link(Plugin):
             )
             return True
 
-        self._log.warning(
+        self._log.error(
             f"{display_path(link_name)} already exists but is a regular file or directory"
         )
         return False
@@ -557,7 +553,7 @@ class Link(Plugin):
                     f"Nothing to copy, nonexistent target {display_path(link_name)} -> {display_path(source)}"
                 )
                 return True
-            self._log.warning(
+            self._log.error(
                 f"Nonexistent target {display_path(link_name)} -> {display_path(source)}"
             )
             return False
@@ -565,7 +561,7 @@ class Link(Plugin):
         exists = os.path.lexists(destination)
         if exists and os.path.islink(destination):
             if not (relink or force):
-                self._log.warning(
+                self._log.error(
                     f"{display_path(link_name)} already exists but is a symbolic link, not a copy"
                 )
                 return False
@@ -579,7 +575,7 @@ class Link(Plugin):
             expected, found = (
                 ("directory", "file") if source_is_directory else ("file", "directory")
             )
-            self._log.warning(
+            self._log.error(
                 f"{display_path(link_name)} already exists but is a {found}, not a {expected}"
             )
             return False
@@ -587,7 +583,7 @@ class Link(Plugin):
             try:
                 differs = self._differs(source, destination)
             except OSError as e:
-                self._log.warning(
+                self._log.error(
                     f"Failed to compare {display_path(link_name)} with {display_path(source)}"
                 )
                 self._log.debug(f"OSError: {e!s}")
@@ -624,7 +620,7 @@ class Link(Plugin):
             else:
                 self._copy_file(source, destination)
         except OSError as e:
-            self._log.warning(
+            self._log.error(
                 f"Copying failed {display_path(link_name)} -> {display_path(source)}"
             )
             self._log.debug(f"OSError: {e!s}")
@@ -712,7 +708,7 @@ class Link(Plugin):
         try:
             self._remove_path(path)
         except OSError as e:
-            self._log.warning(f"Failed to remove {display_path(name)}")
+            self._log.error(f"Failed to remove {display_path(name)}")
             self._log.debug(f"OSError: {e!s}")
             return False
         self._log.action(f"Removing {display_path(name)}")

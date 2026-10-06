@@ -313,10 +313,8 @@ def test_dry_run_unaware_plugin(
 
     assert not os.path.exists(os.path.join(home, "flag-file"))
 
-    stdout = capfd.readouterr().out.splitlines()
-    assert any(
-        line.strip() == "Skipping dry-run-unaware plugin File" for line in stdout
-    )
+    stderr = capfd.readouterr().err.splitlines()
+    assert "warning: Skipping dry-run-unaware plugin File" in stderr
 
 
 def test_dry_run_aware_plugin(
@@ -478,3 +476,77 @@ def test_dispatcher_without_options(home: str, dotfiles: Dotfiles) -> None:
         assert file.read() == "apple"
     with open(os.path.join(dotfiles.directory, "g")) as file:
         assert file.read().strip() == "banana"
+
+
+def test_summary(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that the last line counts the warnings and actions of each run."""
+
+    _ = home
+    dotfiles.write("f")
+    dotfiles.write_config([{"link": {"~/.f": {"path": "f", "unknown": True}}}])
+
+    run_dotbot("--dry-run")
+    assert capfd.readouterr().out.splitlines()[-1] == (
+        "Dry run done (1 warning, 1 action)"
+    )
+    run_dotbot()
+    assert capfd.readouterr().out.splitlines()[-1] == "Done (1 warning, 1 action)"
+    run_dotbot()
+    assert capfd.readouterr().out.splitlines()[-1] == "Done (1 warning)"
+
+
+@pytest.mark.parametrize(
+    ("arguments", "summary"),
+    [
+        ([], "Failed (1 error, 1 action)"),
+        (["-x"], "Stopped after the first failure (1 error)"),
+    ],
+)
+def test_summary_failure(
+    arguments: list[str],
+    summary: str,
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a failed item is one error, and the last line counts the errors."""
+
+    _ = home
+    dotfiles.write("f")
+    dotfiles.write_config(
+        [{"link": {"~/.missing": "missing"}}, {"link": {"~/.f": "f"}}]
+    )
+    with pytest.raises(SystemExit):
+        run_dotbot(*arguments)
+
+    assert capfd.readouterr().err.splitlines() == [
+        f"error: Nonexistent target {os.path.join('~', '.missing')} -> missing",
+        f"error: {summary}",
+    ]
+
+
+def test_plugin_failure_without_error(
+    capfd: pytest.CaptureFixture[str],
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that a plugin that fails without an error message gets one."""
+
+    plugin_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_fail.py"
+    )
+    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "fail.py"))
+    dotfiles.write_config([{"fail": None}])
+    with pytest.raises(SystemExit):
+        run_dotbot("--plugin", os.path.join(dotfiles.directory, "fail.py"))
+
+    assert capfd.readouterr().err.splitlines() == [
+        "error: Action fail failed",
+        "error: Failed (1 error)",
+    ]

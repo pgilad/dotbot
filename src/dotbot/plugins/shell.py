@@ -55,12 +55,12 @@ class Shell(Plugin):
                 msg = None
             if cmd is None:
                 success = False
-                self._log.warning(f"Missing command for shell entry {item!r}")
+                self._log.error(f"Missing command for shell entry {item!r}")
                 continue
             prefix = "Would run command " if self._context.dry_run() else ""
             if quiet:
                 if msg is not None:
-                    self._log.info(f"{prefix}{msg}")
+                    self._log.action(f"{prefix}{msg}")
                 # if quiet and no msg, show nothing
             elif msg is None:
                 self._log.action(f"{prefix}{cmd}")
@@ -80,11 +80,7 @@ class Shell(Plugin):
             )
             if ret != 0:
                 success = False
-                self._log.warning(f"Command [{cmd}] failed")
-        if success:
-            self._log.info("All commands have been executed")
-        else:
-            self._log.error("Some commands were not successfully executed")
+                self._log.error(f"Command [{cmd}] failed")
         return success
 
     def _get_option_overrides(self) -> dict[str, bool]:

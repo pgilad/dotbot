@@ -4,7 +4,7 @@ from argparse import Namespace
 from typing import Any
 
 from dotbot.context import Context
-from dotbot.messenger import Messenger
+from dotbot.messenger import Level, Messenger
 from dotbot.plugin import Plugin
 from dotbot.util.module import load_plugins
 
@@ -80,33 +80,39 @@ class Dispatcher:
                             for plugin_class in new_plugins:
                                 self._plugins.append(plugin_class(self._context))
                         except Exception as err:  # noqa: BLE001
-                            self._log.warning(f"Failed to load plugin '{plugin_path}'")
-                            self._log.debug(str(err))
+                            self._log.error(
+                                f"Failed to load plugin '{plugin_path}': {err}"
+                            )
+                            self._log.debug(traceback.format_exc())
                             plugins_success = False
                     if not plugins_success:
                         success = False
-                        self._log.error("Some plugins could not be loaded")
                         if self._exit:
-                            self._log.error("Action plugins failed")
                             return False
                     handled = True
                     # keep going, let other plugins handle this if they want
                 for plugin in self._plugins:
                     if plugin.can_handle(action):
                         if self._dry_run and not plugin.supports_dry_run:
-                            self._log.action(
+                            # the dry run doesn't show what the plugin would do
+                            self._log.warning(
                                 f"Skipping dry-run-unaware plugin {plugin.__class__.__name__}"
                             )
                             handled = True
                             continue
                         try:
+                            errors = self._log.count(Level.ERROR)
                             local_success = plugin.handle(action, task[action])
-                            if not local_success and self._exit:
-                                # The action has failed, exit
+                            if (
+                                not local_success
+                                and self._log.count(Level.ERROR) == errors
+                            ):
+                                # the plugin didn't log an error for the failure
                                 self._log.error(f"Action {action} failed")
-                                return False
                             success &= local_success
                             handled = True
+                            if not local_success and self._exit:
+                                return False
                         except Exception as err:  # noqa: BLE001
                             self._log.error(
                                 f"An error was encountered while executing action {action}: "

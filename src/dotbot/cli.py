@@ -106,6 +106,19 @@ def read_config(config_files: list[str]) -> Any:
     return reader.get_config()
 
 
+def summary(log: Messenger) -> str:
+    """
+    Returns the numbers of errors, warnings, and actions of the run.
+    """
+    counts = [
+        (log.count(Level.ERROR), "error"),
+        (log.count(Level.WARNING), "warning"),
+        (log.count(Level.ACTION), "action"),
+    ]
+    parts = [f"{n} {name}{'s' if n != 1 else ''}" for n, name in counts if n]
+    return ", ".join(parts) or "no actions"
+
+
 def git_commit() -> str | None:
     """
     Returns the commit of the checkout of Dotbot that runs, or None.
@@ -143,10 +156,15 @@ def main() -> None:
             hash_msg = f" (git {commit[:10]})" if commit else ""
             print(f"Dotbot version {dotbot.__version__}{hash_msg}")  # noqa: T201
             sys.exit(0)
+        # set the level and reset the counts each time, because Messenger is a
+        # singleton, and main() can run more than once in a process
+        level = Level.ACTION
         if options.super_quiet or options.quiet:
-            log.set_level(Level.WARNING)
+            level = Level.WARNING
         if options.verbose > 0:
-            log.set_level(Level.INFO if options.verbose == 1 else Level.DEBUG)
+            level = Level.INFO if options.verbose == 1 else Level.DEBUG
+        log.set_level(level)
+        log.reset_counts()
 
         if options.force_color and options.no_color:
             log.error("`--force-color` and `--no-color` cannot both be provided")
@@ -200,9 +218,15 @@ def main() -> None:
         )
         success = dispatcher.dispatch(tasks)
         if success:
-            log.info("All tasks executed successfully")
+            done = "Dry run done" if options.dry_run else "Done"
+            log.action(f"{done} ({summary(log)})")
         else:
-            msg = "Some tasks were not executed successfully"
+            failed = (
+                "Stopped after the first failure"
+                if options.exit_on_failure
+                else "Failed"
+            )
+            msg = f"{failed} ({summary(log)})"
             raise DispatchError(msg)  # noqa: TRY301
     except (ReadingError, DispatchError) as e:
         log.error(str(e))

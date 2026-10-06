@@ -1,4 +1,5 @@
 import sys
+from collections import Counter
 from warnings import deprecated
 
 from dotbot.messenger.color import Color
@@ -10,6 +11,7 @@ class Messenger(metaclass=Singleton):
     def __init__(self, level: Level = Level.ACTION):
         self.set_level(level)
         self.use_color(True)
+        self.reset_counts()
 
     def set_level(self, level: Level) -> None:
         self._level = level
@@ -17,7 +19,18 @@ class Messenger(metaclass=Singleton):
     def use_color(self, yesno: bool) -> None:  # noqa: FBT001
         self._use_color = yesno
 
+    def reset_counts(self) -> None:
+        self._counts: Counter[Level] = Counter()
+
+    def count(self, level: Level) -> int:
+        """
+        Returns the number of messages at a level, shown or not, since the last
+        reset_counts().
+        """
+        return self._counts[level]
+
     def log(self, level: Level, message: str) -> None:
+        self._counts[level] += 1
         if level >= self._level:
             # flush, so that messages stay in order with the output of shell commands
             print(

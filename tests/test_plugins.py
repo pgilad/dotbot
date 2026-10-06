@@ -133,7 +133,7 @@ def test_plugin_nonexistent(
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that trying to load a non-existent plugin emits a warning and error."""
+    """Verify that trying to load a non-existent plugin is an error."""
     dotfiles.write_config(
         [
             {"plugins": ["nonexistent.py"]},
@@ -144,8 +144,10 @@ def test_plugin_nonexistent(
         run_dotbot()
     assert excinfo.value.code == 1
     stderr = capfd.readouterr().err.splitlines()
-    assert any("Failed to load plugin 'nonexistent.py'" in line for line in stderr)
-    assert any("Some plugins could not be loaded" in line for line in stderr)
+    assert any(
+        line.startswith("error: Failed to load plugin 'nonexistent.py': ")
+        for line in stderr
+    )
 
 
 def test_plugin_empty_list(

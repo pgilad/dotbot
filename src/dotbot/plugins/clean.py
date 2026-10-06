@@ -42,10 +42,6 @@ class Clean(Plugin):
                 force = targets[target].get("force", force)
                 recursive = targets[target].get("recursive", recursive)
             success &= self._clean(normslash(target), force=force, recursive=recursive)
-        if success:
-            self._log.info("All targets have been cleaned")
-        else:
-            self._log.error("Some targets were not successfully cleaned")
         return success
 
     def _clean(self, target: str, *, force: bool, recursive: bool) -> bool:
