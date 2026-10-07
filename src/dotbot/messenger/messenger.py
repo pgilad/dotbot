@@ -45,6 +45,9 @@ class Messenger(metaclass=Singleton):
     def action(self, message: str) -> None:
         self.log(Level.ACTION, message)
 
+    def command(self, message: str) -> None:
+        self.log(Level.COMMAND, message)
+
     def info(self, message: str) -> None:
         self.log(Level.INFO, message)
 

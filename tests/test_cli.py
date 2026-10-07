@@ -385,27 +385,37 @@ def test_summary(
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that the last line counts the warnings and actions of each run."""
+    """Verify that the last line counts the warnings, changes, and commands of
+    each run, and that a command isn't a change."""
 
     _ = home
     dotfiles.write("f")
-    dotfiles.write_config([{"link": {"~/.f": {"path": "f", "unknown": True}}}])
+    dotfiles.write_config(
+        [
+            {"link": {"~/.f": {"path": "f", "unknown": True}}},
+            {"shell": ["echo apple"]},
+        ]
+    )
 
     run_dotbot("--dry-run")
     assert capfd.readouterr().out.splitlines()[-1] == (
-        "Dry run done (1 warning, 1 action)"
+        "Dry run done (1 warning, 1 change, 1 command)"
     )
     run_dotbot()
-    assert capfd.readouterr().out.splitlines()[-1] == "Done (1 warning, 1 action)"
+    assert capfd.readouterr().out.splitlines()[-1] == (
+        "Done (1 warning, 1 change, 1 command)"
+    )
     run_dotbot()
-    assert capfd.readouterr().out.splitlines()[-1] == "Done (1 warning)"
+    assert capfd.readouterr().out.splitlines()[-1] == (
+        "Done (1 warning, no changes, 1 command)"
+    )
 
 
 @pytest.mark.parametrize(
     ("arguments", "summary"),
     [
-        ([], "Failed (1 error, 1 action)"),
-        (["-x"], "Stopped after the first failed directive (1 error)"),
+        ([], "Failed (1 error, 1 change)"),
+        (["-x"], "Stopped after the first failed directive (1 error, no changes)"),
     ],
 )
 def test_summary_failure(
@@ -445,7 +455,7 @@ def test_plugin_failure_without_error(
 
     assert capfd.readouterr().err.splitlines() == [
         "error: Action fail failed",
-        "error: Failed (1 error)",
+        "error: Failed (1 error, no changes)",
     ]
 
 
@@ -482,6 +492,6 @@ def test_color_output(
     stdout = output.out.splitlines()
     link = os.path.join("~", "d", "f")
     assert f"\033[93mwarning: Unknown option 'unknown' for {link}\033[0m" in stderr
-    assert "\033[91merror: Failed (1 error, 1 warning, 2 actions)\033[0m" in stderr
+    assert "\033[91merror: Failed (1 error, 1 warning, 2 changes)\033[0m" in stderr
     assert any(line.startswith("\033[92mCreating symlink ") for line in stdout)
     assert any(line.startswith("\033[90m") for line in stdout)

@@ -108,15 +108,25 @@ def read_config(config_files: list[str]) -> Any:
 
 def summary(log: Messenger) -> str:
     """
-    Returns the numbers of errors, warnings, and actions of the run.
+    Returns the numbers of errors, warnings, changes, and commands of the run.
+
+    The changes are always there, also when there are none, because they tell
+    if the run did something. Commands aren't changes, because Dotbot doesn't
+    know what a command changes.
     """
-    counts = [
-        (log.count(Level.ERROR), "error"),
-        (log.count(Level.WARNING), "warning"),
-        (log.count(Level.ACTION), "action"),
-    ]
-    parts = [f"{n} {name}{'s' if n != 1 else ''}" for n, name in counts if n]
-    return ", ".join(parts) or "no actions"
+    errors = log.count(Level.ERROR)
+    warnings = log.count(Level.WARNING)
+    changes = log.count(Level.ACTION)
+    commands = log.count(Level.COMMAND)
+    parts = []
+    if errors:
+        parts.append(string.plural(errors, "error"))
+    if warnings:
+        parts.append(string.plural(warnings, "warning"))
+    parts.append(string.plural(changes, "change") if changes else "no changes")
+    if commands:
+        parts.append(string.plural(commands, "command"))
+    return ", ".join(parts)
 
 
 def git_commit() -> str | None:

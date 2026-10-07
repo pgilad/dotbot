@@ -6,7 +6,8 @@ class Level(Enum):
     DEBUG = 10
     INFO = 15
     LOWINFO = 15  # Deprecated: use INFO instead  # noqa: PIE796
-    ACTION = 20
+    ACTION = 20  # a change, such as a new link
+    COMMAND = 21  # a command that runs, which can change anything
     WARNING = 30
     ERROR = 40
 

@@ -273,7 +273,13 @@ def test_shell_output_order_with_pipe(home: str, dotfiles: Dotfiles) -> None:
     )
 
     lines = [line.strip() for line in result.stdout.splitlines()]
-    assert lines == ["echo apple", "apple", "echo banana", "banana", "Done (2 actions)"]
+    assert lines == [
+        "echo apple",
+        "apple",
+        "echo banana",
+        "banana",
+        "Done (no changes, 2 commands)",
+    ]
 
 
 @pytest.mark.parametrize(

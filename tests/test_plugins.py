@@ -200,5 +200,5 @@ def test_plugin_loading_after_failure(
         assert file.read() == "file plugin loading works"
     assert capfd.readouterr().err.splitlines() == [
         "error: Command [exit 1] failed with exit code 1",
-        "error: Failed (1 error, 1 action)",
+        "error: Failed (1 error, no changes, 1 command)",
     ]

@@ -60,12 +60,12 @@ class Shell(Plugin):
             prefix = "Would run command " if self._context.dry_run() else ""
             if quiet:
                 if msg is not None:
-                    self._log.action(f"{prefix}{msg}")
+                    self._log.command(f"{prefix}{msg}")
                 # if quiet and no msg, show nothing
             elif msg is None:
-                self._log.action(f"{prefix}{cmd}")
+                self._log.command(f"{prefix}{cmd}")
             else:
-                self._log.action(f"{prefix}{msg} [{cmd}]")
+                self._log.command(f"{prefix}{msg} [{cmd}]")
             if self._context.dry_run():
                 continue
             stdout = options.get("stdout", stdout)

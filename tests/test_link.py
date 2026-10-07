@@ -1065,7 +1065,7 @@ def test_link_relink_relative_keeps_link(
     capfd.readouterr()
     run_dotbot()
 
-    assert capfd.readouterr().out.splitlines()[-1] == "Done (no actions)"
+    assert capfd.readouterr().out.splitlines()[-1] == "Done (no changes)"
 
 
 def test_target_is_not_overwritten_by_symlink_trickery(
