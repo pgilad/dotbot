@@ -1,5 +1,7 @@
 Note: this changelog only lists feature additions, not bugfixes. For details on those, see the Git history.
 
+- v4.0
+    - Remove the deprecated `-Q` (`--super-quiet`) and `--plugin-dir` options: use `-q` and `--plugin`
 - v3.2
     - Show one summary line for each `clean`, `create`, and `link` directive, such as `link: 2 created, 108 in place`
     - Count shell commands apart from changes in the last line, such as `Done (no changes, 1 command)`
