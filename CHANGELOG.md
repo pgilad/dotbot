@@ -1,5 +1,9 @@
 Note: this changelog only lists feature additions, not bugfixes. For details on those, see the Git history.
 
+- v3.2
+    - Show one summary line for each `clean`, `create`, and `link` directive, such as `link: 2 created, 108 in place`
+    - Count shell commands apart from changes in the last line, such as `Done (no changes, 1 command)`
+    - Add `command()` and `summary()` to the log of plugins
 - v3.1
     - Show a summary at the end of a run, with the numbers of errors, warnings, and actions
     - Log each failure as one error, and keep the `warning:` and `error:` words in color output

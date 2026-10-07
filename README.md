@@ -26,7 +26,7 @@ Dotbot reads a YAML file that tells it where your dotfiles go. It links the file
 uv tool install git+https://github.com/pgilad/dotbot
 ```
 
-[uv] downloads Python 3.14+ if necessary. To pin a [release], add its tag to the URL, for example `git+https://github.com/pgilad/dotbot@v3.1.0`. To upgrade, run `uv tool upgrade dotbot`.
+[uv] downloads Python 3.14+ if necessary. To pin a [release], add its tag to the URL, for example `git+https://github.com/pgilad/dotbot@v3.2.0`. To upgrade, run `uv tool upgrade dotbot`.
 
 > [!NOTE]
 > Dotbot isn't on PyPI: the `dotbot` package on PyPI is a different project. On Windows, your account must be [allowed to create symbolic links][windows-symlinks].
