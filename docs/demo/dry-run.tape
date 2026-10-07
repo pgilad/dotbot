@@ -12,7 +12,7 @@ Require uv
 Set Shell bash
 Set FontSize 20
 Set Width 1040
-Set Height 350
+Set Height 430
 Set Padding 28
 Set Theme "Catppuccin Mocha"
 Set WindowBar Colorful
