@@ -32,9 +32,11 @@ class Messenger(metaclass=Singleton):
     def log(self, level: Level, message: str) -> None:
         self._counts[level] += 1
         if level >= self._level:
+            color = self._color(level)
+            reset = Color.RESET if color else ""
             # flush, so that messages stay in order with the output of shell commands
             print(
-                f"{self._color(level)}{self._prefix(level)}{message}{self._reset()}",
+                f"{color}{self._prefix(level)}{message}{reset}",
                 file=sys.stderr if level >= Level.WARNING else sys.stdout,
                 flush=True,
             )
@@ -47,6 +49,9 @@ class Messenger(metaclass=Singleton):
 
     def command(self, message: str) -> None:
         self.log(Level.COMMAND, message)
+
+    def summary(self, message: str) -> None:
+        self.log(Level.SUMMARY, message)
 
     def info(self, message: str) -> None:
         self.log(Level.INFO, message)
@@ -71,6 +76,9 @@ class Messenger(metaclass=Singleton):
             return Color.GRAY
         if level < Level.ACTION:
             return Color.BLUE
+        if level == Level.SUMMARY:
+            # less visible than the changes and commands that it counts
+            return Color.NONE
         if level < Level.WARNING:
             return Color.GREEN
         if level < Level.ERROR:
@@ -86,11 +94,3 @@ class Messenger(metaclass=Singleton):
         if level < Level.ERROR:
             return "warning: "
         return "error: "
-
-    def _reset(self) -> str:
-        """
-        Get a reset color (terminal escape sequence).
-        """
-        if not self._use_color:
-            return ""
-        return Color.RESET

@@ -106,7 +106,7 @@ def read_config(config_files: list[str]) -> Any:
     return reader.get_config()
 
 
-def summary(log: Messenger) -> str:
+def totals(log: Messenger) -> str:
     """
     Returns the numbers of errors, warnings, changes, and commands of the run.
 
@@ -229,14 +229,14 @@ def main() -> None:
         success = dispatcher.dispatch(tasks)
         if success:
             done = "Dry run done" if options.dry_run else "Done"
-            log.action(f"{done} ({summary(log)})")
+            log.summary(f"{done} ({totals(log)})")
         else:
             failed = (
                 "Stopped after the first failed directive"
                 if options.exit_on_failure
                 else "Failed"
             )
-            msg = f"{failed} ({summary(log)})"
+            msg = f"{failed} ({totals(log)})"
             raise DispatchError(msg)  # noqa: TRY301
     except (ReadingError, DispatchError) as e:
         log.error(str(e))

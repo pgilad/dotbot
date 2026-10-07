@@ -91,6 +91,23 @@ def test_create_dry_run(
         f"Directory exists {os.path.join('~', 'existing')}" == line.strip()
         for line in lines
     )
+    assert "create: 1 to create, 1 in place" in lines
+
+
+def test_create_summary(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that the summary line counts the directories of each create."""
+
+    os.makedirs(os.path.join(home, "existing"))
+    dotfiles.write_config([{"create": ["~/a", "~/existing"]}, {"create": []}])
+    run_dotbot()
+
+    lines = capfd.readouterr().out.splitlines()
+    assert lines[-3:-1] == ["create: 1 created, 1 in place", "create: nothing to do"]
 
 
 def test_create_undefined_variable_warns(
@@ -130,7 +147,9 @@ def test_create_file_in_the_way(
     run_dotbot()
 
     assert os.path.isfile(os.path.join(home, "a"))
+    output = capfd.readouterr()
     assert (
         f"warning: {os.path.join('~', 'a')} already exists but is not a directory"
-        in capfd.readouterr().err.splitlines()
+        in output.err.splitlines()
     )
+    assert "create: 1 not a directory" in output.out.splitlines()

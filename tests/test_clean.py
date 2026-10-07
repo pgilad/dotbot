@@ -59,12 +59,15 @@ def test_clean_environment_variable_expansion(
 
 
 def test_clean_missing(
-    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
 ) -> None:
     """Verify clean deletes broken links that point in the base directory.
 
     Links that aren't broken stay, and so do broken links that point outside of
-    the base directory.
+    the base directory. The summary line counts both.
     """
 
     dotfiles.write("f")
@@ -77,16 +80,28 @@ def test_clean_missing(
     assert os.path.islink(os.path.join(home, ".f"))
     assert not os.path.islink(os.path.join(home, ".g"))
     assert os.path.islink(os.path.join(home, ".h"))
+    assert (
+        "clean: 1 directory checked, 1 invalid link removed, 1 invalid link kept"
+        in capfd.readouterr().out.splitlines()
+    )
 
 
 def test_clean_nonexistent(
-    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify clean ignores nonexistent directories."""
+    """Verify clean ignores nonexistent directories, also in the summary line."""
 
     _ = home
     dotfiles.write_config([{"clean": ["~", "~/fake"]}])
     run_dotbot()  # Nonexistent directories should not raise exceptions.
+
+    assert (
+        "clean: 1 directory checked, no invalid links"
+        in capfd.readouterr().out.splitlines()
+    )
 
 
 @pytest.mark.parametrize(
@@ -153,6 +168,7 @@ def test_clean_dry_run(
         link = os.path.join("~", name)
         target = os.path.join(root, "nowhere")
         assert f"Would remove invalid link {link} -> {target}" in lines
+    assert "clean: 3 directories checked, 3 invalid links to remove" in lines
 
 
 def test_clean_recursive_does_not_follow_symlinked_directories(

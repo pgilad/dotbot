@@ -6,8 +6,9 @@ import shutil
 import stat
 import sys
 import tempfile
+from collections import Counter
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from dotbot.plugin import Plugin
 from dotbot.util import shell_command
@@ -18,6 +19,9 @@ from dotbot.util.common import (
     undefined_variable,
     unknown_options,
 )
+
+# the result of one link
+type Outcome = Literal["created", "updated", "in place", "kept", "skipped", "failed"]
 
 
 class Link(Plugin):
@@ -58,7 +62,9 @@ class Link(Plugin):
         return self._process_links(data)
 
     def _process_links(self, links: Any) -> bool:
+        # the failures of the steps before a link, such as a backup
         success = True
+        results: Counter[Outcome] = Counter()
         defaults = self._context.defaults().get("link", {})
         for key in unknown_options(defaults, self._options):
             self._log.warning(f"Unknown option '{key}' in link defaults")
@@ -101,7 +107,7 @@ class Link(Plugin):
                 if link_type not in self._types:
                     msg = f"The link type is not recognized: '{link_type}'"
                     self._log.error(msg)
-                    success = False
+                    results["failed"] += 1
                     continue
                 force = target.get("force", force)
                 relink = target.get("relink", relink)
@@ -119,6 +125,7 @@ class Link(Plugin):
                 self._log.info(
                     f"Skipping {display_path(link_name)}, because `if: {test}` is false"
                 )
+                results["skipped"] += 1
                 continue
             path = os.path.normpath(os.path.expandvars(os.path.expanduser(path)))
             # check after the test, which can guard a link that uses a variable;
@@ -152,7 +159,7 @@ class Link(Plugin):
                     if create:
                         success &= self._create(glob_link_name)
                     if link_type == "copy":
-                        success &= self._copy(
+                        outcome = self._copy(
                             glob_full_item,
                             glob_link_name,
                             canonical_path=canonical_path,
@@ -161,6 +168,7 @@ class Link(Plugin):
                             relink=relink,
                             backup=backup,
                         )
+                        results[outcome] += 1
                         continue
                     did_backup = False
                     did_delete = False
@@ -177,7 +185,7 @@ class Link(Plugin):
                             force=force,
                         )
                         success &= delete_success
-                    success &= self._link(
+                    outcome = self._link(
                         glob_full_item,
                         glob_link_name,
                         relative=relative,
@@ -186,6 +194,7 @@ class Link(Plugin):
                         link_type=link_type,
                         assume_gone=(did_backup or did_delete),
                     )
+                    results[outcome] += 1
             else:
                 if create:
                     success &= self._create(link_name)
@@ -195,13 +204,13 @@ class Link(Plugin):
                     # we seemingly check this twice (here and in _link) because
                     # if the file doesn't exist and force is True, we don't
                     # want to remove the original (this is tested by test_link_force_leaves_when_nonexistent)
-                    success = False
+                    results["failed"] += 1
                     self._log.error(
                         f"Nonexistent target {display_path(link_name)} -> {display_path(path)}"
                     )
                     continue
                 if link_type == "copy":
-                    success &= self._copy(
+                    outcome = self._copy(
                         path,
                         link_name,
                         canonical_path=canonical_path,
@@ -210,6 +219,7 @@ class Link(Plugin):
                         relink=relink,
                         backup=backup,
                     )
+                    results[outcome] += 1
                     continue
                 did_backup = False
                 did_delete = False
@@ -226,7 +236,7 @@ class Link(Plugin):
                         force=force,
                     )
                     success &= delete_success
-                success &= self._link(
+                outcome = self._link(
                     path,
                     link_name,
                     relative=relative,
@@ -235,7 +245,25 @@ class Link(Plugin):
                     link_type=link_type,
                     assume_gone=(did_backup or did_delete),
                 )
-        return success
+                results[outcome] += 1
+        self._log.summary(self._summary(results))
+        return success and not results["failed"]
+
+    def _summary(self, results: Counter[Outcome]) -> str:
+        """
+        Returns the line that counts the results of a link directive.
+        """
+        dry_run = self._context.dry_run()
+        labels: list[tuple[Outcome, str]] = [
+            ("created", "to create" if dry_run else "created"),
+            ("updated", "to update" if dry_run else "updated"),
+            ("in place", "in place"),
+            ("kept", "kept with local changes"),
+            ("skipped", "skipped"),
+            ("failed", "failed"),
+        ]
+        parts = [f"{results[key]} {label}" for key, label in labels if results[key]]
+        return f"link: {', '.join(parts) or 'nothing to do'}"
 
     def _test_success(self, command: str) -> bool:
         ret = shell_command(command, cwd=self._context.base_directory())
@@ -434,13 +462,13 @@ class Link(Plugin):
         ignore_missing: bool,
         link_type: str,
         assume_gone: bool,
-    ) -> bool:
+    ) -> Outcome:
         """
         Links link_name to target.
 
         The caller must ensure that the target exists.
 
-        Returns true if successfully linked files.
+        Returns the result: created, in place, or failed.
         """
 
         link_path = os.path.abspath(os.path.expanduser(link_name))
@@ -463,7 +491,7 @@ class Link(Plugin):
                 self._log.action(
                     f"Would create {link_type} {display_path(link_name)} -> {display_path(target_path)}"
                 )
-                return True
+                return "created"
             try:
                 if link_type == "symlink":
                     os.symlink(target_path, link_path)
@@ -473,12 +501,12 @@ class Link(Plugin):
                 self._log.error(
                     f"Linking failed {display_path(link_name)} -> {display_path(target_path)}: {error_reason(e)}"
                 )
-                return False
+                return "failed"
             else:
                 self._log.action(
                     f"Creating {link_type} {display_path(link_name)} -> {display_path(target_path)}"
                 )
-                return True
+                return "created"
 
         # Failure case: The link name exists and is a symlink
         if self._is_link(link_name):
@@ -488,7 +516,7 @@ class Link(Plugin):
                     self._log.info(
                         f"Link exists {display_path(link_name)} -> {display_path(target_path)}"
                     )
-                    return True
+                    return "in place"
 
                 # The existing symlink isn't pointing at the target.
                 # Distinguish between an incorrect symlink and a broken ("invalid") symlink.
@@ -496,12 +524,12 @@ class Link(Plugin):
                 self._log.error(
                     f"{terminology} link {display_path(link_name)} -> {display_path(self._link_target(link_name))}"
                 )
-                return False
+                return "failed"
 
             self._log.error(
                 f"{display_path(link_name)} already exists but is a symbolic link, not a hard link"
             )
-            return False
+            return "failed"
 
         # Failure case: The link name exists
         if (
@@ -513,14 +541,14 @@ class Link(Plugin):
             self._log.info(
                 f"Link exists {display_path(link_name)} -> {display_path(target_path)}"
             )
-            return True
+            return "in place"
 
         found = "directory" if os.path.isdir(link_path) else "file"
         expected = "hard link" if link_type == "hardlink" else "symbolic link"
         self._log.error(
             f"{display_path(link_name)} already exists but is a {found}, not a {expected}"
         )
-        return False
+        return "failed"
 
     def _copy(
         self,
@@ -532,7 +560,7 @@ class Link(Plugin):
         force: bool,
         relink: bool,
         backup: bool,
-    ) -> bool:
+    ) -> Outcome:
         """
         Copies target to link_name.
 
@@ -544,7 +572,8 @@ class Link(Plugin):
         replaced only if relink or force is set, and so is a file where the
         target is a directory (or the other way around).
 
-        Returns true on success, which includes keeping a copy that differs.
+        Returns the result: created, updated, in place, kept (a copy that
+        differs), skipped (a missing target with ignore-missing), or failed.
         """
 
         source = os.path.join(
@@ -557,11 +586,11 @@ class Link(Plugin):
                 self._log.info(
                     f"Nothing to copy, nonexistent target {display_path(link_name)} -> {display_path(source)}"
                 )
-                return True
+                return "skipped"
             self._log.error(
                 f"Nonexistent target {display_path(link_name)} -> {display_path(source)}"
             )
-            return False
+            return "failed"
 
         exists = os.path.lexists(destination)
         if exists and os.path.islink(destination):
@@ -569,9 +598,9 @@ class Link(Plugin):
                 self._log.error(
                     f"{display_path(link_name)} already exists but is a symbolic link, not a copy"
                 )
-                return False
+                return "failed"
             if not self._remove(destination, link_name):
-                return False
+                return "failed"
             exists = False
         # a file can't be copied over a directory, or the other way around
         source_is_directory = os.path.isdir(source)
@@ -583,7 +612,7 @@ class Link(Plugin):
             self._log.error(
                 f"{display_path(link_name)} already exists but is a {found}, not a {expected}"
             )
-            return False
+            return "failed"
         if exists and not other_type:
             try:
                 differs = self._differs(source, destination)
@@ -591,25 +620,25 @@ class Link(Plugin):
                 self._log.error(
                     f"Failed to compare {display_path(link_name)} with {display_path(source)}: {error_reason(e)}"
                 )
-                return False
+                return "failed"
             if not differs:
                 self._log.info(
                     f"Copy exists {display_path(link_name)} -> {display_path(source)}"
                 )
-                return True
+                return "in place"
             if not (force or backup):
                 self._log.info(
                     f"Copy {display_path(link_name)} differs from {display_path(source)}, keeping it"
                 )
-                return True
+                return "kept"
         if exists and backup:
             _, backup_success = self._backup(link_name)
             if not backup_success:
-                return False
+                return "failed"
             exists = False
         if exists and other_type:
             if not self._remove(destination, link_name):
-                return False
+                return "failed"
             exists = False
 
         verb = "update" if exists else "create"
@@ -617,7 +646,7 @@ class Link(Plugin):
             self._log.action(
                 f"Would {verb} copy {display_path(link_name)} -> {display_path(source)}"
             )
-            return True
+            return "updated" if exists else "created"
         try:
             if source_is_directory:
                 self._copy_directory(source, destination)
@@ -627,11 +656,11 @@ class Link(Plugin):
             self._log.error(
                 f"Copying failed {display_path(link_name)} -> {display_path(source)}: {error_reason(e)}"
             )
-            return False
+            return "failed"
         self._log.action(
             f"{'Updating' if exists else 'Creating'} copy {display_path(link_name)} -> {display_path(source)}"
         )
-        return True
+        return "updated" if exists else "created"
 
     def _copy_file(self, source: str, destination: str) -> None:
         """

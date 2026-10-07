@@ -1068,6 +1068,54 @@ def test_link_relink_relative_keeps_link(
     assert capfd.readouterr().out.splitlines()[-1] == "Done (no changes)"
 
 
+def test_link_summary(
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that the summary line counts the result of each link."""
+
+    dotfiles.write("f")
+    dotfiles.write("c", "apple")
+    for name in [".kept", ".updated"]:
+        with open(os.path.join(home, name), "w") as file:
+            file.write("banana")
+    dotfiles.write_config(
+        [
+            {
+                "link": {
+                    "~/.f": "f",
+                    "~/.kept": {"path": "c", "type": "copy"},
+                    "~/.updated": {"path": "c", "type": "copy", "force": True},
+                    "~/.skipped": {"path": "f", "if": "exit 1"},
+                    "~/.missing": "missing",
+                }
+            },
+            {"link": {}},
+        ]
+    )
+
+    expected = [
+        (
+            ["--dry-run"],
+            "link: 1 to create, 1 to update, 1 kept with local changes, "
+            "1 skipped, 1 failed",
+        ),
+        (
+            [],
+            "link: 1 created, 1 updated, 1 kept with local changes, "
+            "1 skipped, 1 failed",
+        ),
+        ([], "link: 2 in place, 1 kept with local changes, 1 skipped, 1 failed"),
+    ]
+    for arguments, summary in expected:
+        with pytest.raises(SystemExit):
+            run_dotbot(*arguments)
+        lines = capfd.readouterr().out.splitlines()
+        assert lines[-2:] == [summary, "link: nothing to do"]
+
+
 def test_target_is_not_overwritten_by_symlink_trickery(
     capsys: pytest.CaptureFixture[str],
     home: str,

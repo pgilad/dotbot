@@ -31,7 +31,7 @@ A plugin is a subclass of `dotbot.Plugin` with two methods:
 - `can_handle(directive)` returns `True` if the plugin handles the directive.
 - `handle(directive, data)` does the work and returns `True` if it succeeds. If it fails, log what failed with `self._log.error()`; if you don't, Dotbot logs `Action <directive> failed`.
 
-Log each change with `self._log.action()`, and each command that the plugin runs with `self._log.command()`. The last line of a run counts the changes and the commands.
+Log each change with `self._log.action()`, and each command that the plugin runs with `self._log.command()`. The last line of a run counts the changes and the commands. At the end of `handle()`, you can log one line that counts the results with `self._log.summary()`, such as `hello: 2 greeted`.
 
 To support `--dry-run`, set `supports_dry_run = True`, and when `self._context.dry_run()` is true, log what the plugin would do without doing it. Dotbot skips plugins without dry-run support in a dry run.
 

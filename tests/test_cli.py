@@ -248,7 +248,7 @@ def test_quiet(
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that quiet hides the actions, but not the warnings.
+    """Verify that quiet hides the actions and the summaries, but not the warnings.
 
     `-Q` is the deprecated form of `-q`.
     """
@@ -494,4 +494,6 @@ def test_color_output(
     assert f"\033[93mwarning: Unknown option 'unknown' for {link}\033[0m" in stderr
     assert "\033[91merror: Failed (1 error, 1 warning, 2 changes)\033[0m" in stderr
     assert any(line.startswith("\033[92mCreating symlink ") for line in stdout)
+    # a summary has no color, so that it is less visible than the actions
+    assert "link: 1 created, 1 failed" in stdout
     assert any(line.startswith("\033[90m") for line in stdout)

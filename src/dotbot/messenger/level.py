@@ -8,6 +8,7 @@ class Level(Enum):
     LOWINFO = 15  # Deprecated: use INFO instead  # noqa: PIE796
     ACTION = 20  # a change, such as a new link
     COMMAND = 21  # a command that runs, which can change anything
+    SUMMARY = 25  # a line that counts the results of a directive or a run
     WARNING = 30
     ERROR = 40
 
