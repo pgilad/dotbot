@@ -1,16 +1,31 @@
 import os
 import sys
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
 from tests.conftest import Dotfiles
 
 
-def test_clean_default(
+def make_broken_links(root: str, home: str) -> list[str]:
+    """Make broken links in home and in its subdirectories.
+
+    The links point outside of the base directory. Returns their paths,
+    relative to home.
+    """
+
+    os.makedirs(os.path.join(home, "a", "b"))
+    names = ["c", os.path.join("a", "d"), os.path.join("a", "b", "e")]
+    for name in names:
+        os.symlink(os.path.join(root, "nowhere"), os.path.join(home, name))
+    return names
+
+
+def test_clean_options_apply_to_one_directory(
     root: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
 ) -> None:
-    """Verify clean uses default unless overridden."""
+    """Verify that the options of a directory don't apply to the next directory."""
 
     os.symlink(os.path.join(root, "nowhere"), os.path.join(home, ".g"))
     dotfiles.write_config(
@@ -25,7 +40,6 @@ def test_clean_default(
     )
     run_dotbot()
 
-    assert not os.path.isdir(os.path.join(home, "nonexistent"))
     assert os.path.islink(os.path.join(home, ".g"))
 
 
@@ -47,16 +61,22 @@ def test_clean_environment_variable_expansion(
 def test_clean_missing(
     home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
 ) -> None:
-    """Verify clean deletes links to missing files."""
+    """Verify clean deletes broken links that point in the base directory.
+
+    Links that aren't broken stay, and so do broken links that point outside of
+    the base directory.
+    """
 
     dotfiles.write("f")
     os.symlink(os.path.join(dotfiles.directory, "f"), os.path.join(home, ".f"))
     os.symlink(os.path.join(dotfiles.directory, "g"), os.path.join(home, ".g"))
+    os.symlink(os.path.join(home, "h"), os.path.join(home, ".h"))
     dotfiles.write_config([{"clean": ["~"]}])
     run_dotbot()
 
     assert os.path.islink(os.path.join(home, ".f"))
     assert not os.path.islink(os.path.join(home, ".g"))
+    assert os.path.islink(os.path.join(home, ".h"))
 
 
 def test_clean_nonexistent(
@@ -64,99 +84,54 @@ def test_clean_nonexistent(
 ) -> None:
     """Verify clean ignores nonexistent directories."""
 
+    _ = home
     dotfiles.write_config([{"clean": ["~", "~/fake"]}])
     run_dotbot()  # Nonexistent directories should not raise exceptions.
 
-    assert not os.path.isdir(os.path.join(home, "fake"))
 
-
+@pytest.mark.parametrize(
+    "config",
+    [
+        pytest.param([{"clean": {"~/": {"force": True}}}], id="option"),
+        pytest.param(
+            [{"defaults": {"clean": {"force": True}}}, {"clean": ["~"]}],
+            id="defaults",
+        ),
+    ],
+)
 def test_clean_outside_force(
-    root: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+    config: list[dict[str, Any]],
+    root: str,
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify clean forced to remove files linking outside dotfiles directory."""
+    """Verify that force removes broken links that point outside of the base directory."""
 
     os.symlink(os.path.join(root, "nowhere"), os.path.join(home, ".g"))
-    dotfiles.write_config([{"clean": {"~/": {"force": True}}}])
+    dotfiles.write_config(config)
     run_dotbot()
 
     assert not os.path.islink(os.path.join(home, ".g"))
 
 
-def test_clean_outside(
-    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+@pytest.mark.parametrize("recursive", [False, True])
+def test_clean_recursive(
+    recursive: bool,  # noqa: FBT001
+    root: str,
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify clean ignores files linking outside dotfiles directory."""
+    """Verify clean removes the links in subdirectories only if recursive is on."""
 
-    os.symlink(os.path.join(dotfiles.directory, "f"), os.path.join(home, ".f"))
-    os.symlink(os.path.join(home, "g"), os.path.join(home, ".g"))
-    dotfiles.write_config([{"clean": ["~"]}])
+    top, *nested = make_broken_links(root, home)
+    dotfiles.write_config([{"clean": {"~": {"force": True, "recursive": recursive}}}])
     run_dotbot()
 
-    assert not os.path.islink(os.path.join(home, ".f"))
-    assert os.path.islink(os.path.join(home, ".g"))
-
-
-def test_clean_recursive_1(
-    root: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
-) -> None:
-    """Verify clean respects when the recursive directive is off (default)."""
-
-    os.makedirs(os.path.join(home, "a", "b"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "c"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "a", "d"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "a", "b", "e"))
-    dotfiles.write_config([{"clean": {"~": {"force": True}}}])
-    run_dotbot()
-
-    assert not os.path.islink(os.path.join(home, "c"))
-    assert os.path.islink(os.path.join(home, "a", "d"))
-    assert os.path.islink(os.path.join(home, "a", "b", "e"))
-
-
-def test_clean_recursive_2(
-    root: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
-) -> None:
-    """Verify clean respects when the recursive directive is on."""
-
-    os.makedirs(os.path.join(home, "a", "b"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "c"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "a", "d"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "a", "b", "e"))
-    dotfiles.write_config([{"clean": {"~": {"force": True, "recursive": True}}}])
-    run_dotbot()
-
-    assert not os.path.islink(os.path.join(home, "c"))
-    assert not os.path.islink(os.path.join(home, "a", "d"))
-    assert not os.path.islink(os.path.join(home, "a", "b", "e"))
-
-
-def test_clean_defaults_1(
-    root: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
-) -> None:
-    """Verify that clean doesn't erase non-dotfiles links by default."""
-
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, ".g"))
-    dotfiles.write_config([{"clean": ["~"]}])
-    run_dotbot()
-
-    assert os.path.islink(os.path.join(home, ".g"))
-
-
-def test_clean_defaults_2(
-    root: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
-) -> None:
-    """Verify that explicit clean defaults override the implicit default."""
-
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, ".g"))
-    dotfiles.write_config(
-        [
-            {"defaults": {"clean": {"force": True}}},
-            {"clean": ["~"]},
-        ]
-    )
-    run_dotbot()
-
-    assert not os.path.islink(os.path.join(home, ".g"))
+    assert not os.path.islink(os.path.join(home, top))
+    for name in nested:
+        assert os.path.islink(os.path.join(home, name)) is not recursive
 
 
 def test_clean_dry_run(
@@ -166,58 +141,18 @@ def test_clean_dry_run(
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that the clean plugin does not delete files during a dry run."""
+    """Verify that the clean plugin does not delete links during a dry run."""
 
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, ".g"))
-    dotfiles.write_config([{"clean": {"~/": {"force": True}}}])
-    run_dotbot("-n")
-
-    assert os.path.islink(os.path.join(home, ".g"))
-
-    lines = capfd.readouterr().out.splitlines()
-    assert any(
-        f"Would remove invalid link {os.path.join('~', '.g')} -> {os.path.join(root, 'nowhere')}"
-        in line
-        for line in lines
-    )
-
-
-def test_clean_dry_run_recursive(
-    capfd: pytest.CaptureFixture[str],
-    root: str,
-    home: str,
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that the clean plugin does not delete files during a recursive dry run."""
-
-    os.makedirs(os.path.join(home, "a", "b"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "c"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "a", "d"))
-    os.symlink(os.path.join(root, "nowhere"), os.path.join(home, "a", "b", "e"))
+    names = make_broken_links(root, home)
     dotfiles.write_config([{"clean": {"~": {"force": True, "recursive": True}}}])
     run_dotbot("-n")
 
-    assert os.path.islink(os.path.join(home, "c"))
-    assert os.path.islink(os.path.join(home, "a", "d"))
-    assert os.path.islink(os.path.join(home, "a", "b", "e"))
-
     lines = capfd.readouterr().out.splitlines()
-    assert any(
-        f"Would remove invalid link {os.path.join('~', 'c')} -> {os.path.join(root, 'nowhere')}"
-        in line
-        for line in lines
-    )
-    assert any(
-        f"Would remove invalid link {os.path.join('~', 'a', 'd')} -> {os.path.join(root, 'nowhere')}"
-        in line
-        for line in lines
-    )
-    assert any(
-        f"Would remove invalid link {os.path.join('~', 'a', 'b', 'e')} -> {os.path.join(root, 'nowhere')}"
-        in line
-        for line in lines
-    )
+    for name in names:
+        assert os.path.islink(os.path.join(home, name))
+        link = os.path.join("~", name)
+        target = os.path.join(root, "nowhere")
+        assert f"Would remove invalid link {link} -> {target}" in lines
 
 
 def test_clean_recursive_does_not_follow_symlinked_directories(

@@ -7,232 +7,85 @@ import pytest
 
 from tests.conftest import Dotfiles
 
+# a command that writes to stdout and to stderr (also in cmd.exe on Windows)
+APPLE_AND_BANANA = "echo apple && echo banana >&2"
 
-def test_shell_allow_stdout(
+
+@pytest.mark.parametrize("arguments", [[], ["-v"]])
+def test_shell_output_hidden_by_default(
+    arguments: list[str],
     capfd: pytest.CaptureFixture[str],
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify shell command STDOUT works."""
+    """Verify that the output of commands is hidden by default, also with '-v'."""
 
-    dotfiles.write_config(
-        [
-            {
-                "shell": [
-                    {
-                        "command": "echo apple",
-                        "stdout": True,
-                    }
-                ],
-            }
-        ]
-    )
-    run_dotbot()
+    dotfiles.write_config([{"shell": [APPLE_AND_BANANA]}])
+    run_dotbot(*arguments)
 
     output = capfd.readouterr()
-    assert any(line.startswith("apple") for line in output.out.splitlines()), output
+    assert not any(line.startswith("apple") for line in output.out.splitlines())
+    assert not any(line.startswith("banana") for line in output.err.splitlines())
 
 
-def test_shell_cli_verbosity_overrides_1(
+@pytest.mark.parametrize("disabled_in", [None, "command", "defaults"])
+def test_shell_vv_shows_output(
+    disabled_in: str | None,
     capfd: pytest.CaptureFixture[str],
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that '-vv' overrides the implicit default stdout=False."""
+    """Verify that '-vv' shows the output of commands, also if it's disabled."""
 
-    dotfiles.write_config([{"shell": [{"command": "echo apple"}]}])
+    disabled = {"stdout": False, "stderr": False}
+    command: dict[str, object] = {"command": APPLE_AND_BANANA}
+    config: list[dict[str, object]] = [{"shell": [command]}]
+    if disabled_in == "command":
+        command.update(disabled)
+    elif disabled_in == "defaults":
+        config.insert(0, {"defaults": {"shell": disabled}})
+    dotfiles.write_config(config)
     run_dotbot("-vv")
 
-    lines = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("apple") for line in lines)
+    output = capfd.readouterr()
+    assert any(line.startswith("apple") for line in output.out.splitlines())
+    assert any(line.startswith("banana") for line in output.err.splitlines())
 
 
-def test_shell_cli_verbosity_overrides_2(
+@pytest.mark.parametrize(
+    ("entry", "expected"),
+    [
+        pytest.param("echo apple", ["echo apple", "apple"], id="string"),
+        pytest.param(
+            ["echo apple", "echoing message"],
+            ["echoing message [echo apple]", "apple"],
+            id="list",
+        ),
+    ],
+)
+def test_shell_short_forms(
+    entry: str | list[str],
+    expected: list[str],
     capfd: pytest.CaptureFixture[str],
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that '-vv' overrides an explicit stdout=False."""
+    """Verify the string form and the [command, description] form of a command.
 
-    dotfiles.write_config([{"shell": [{"command": "echo apple", "stdout": False}]}])
-    run_dotbot("-vv")
-
-    lines = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("apple") for line in lines)
-
-
-def test_shell_cli_verbosity_overrides_3(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that '-vv' overrides an explicit defaults:shell:stdout=False."""
-
-    dotfiles.write_config(
-        [
-            {"defaults": {"shell": {"stdout": False}}},
-            {"shell": [{"command": "echo apple"}]},
-        ]
-    )
-    run_dotbot("-vv")
-
-    stdout = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("apple") for line in stdout)
-
-
-def test_shell_cli_verbosity_stderr(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that commands can output to STDERR."""
-
-    dotfiles.write_config([{"shell": [{"command": "echo apple >&2"}]}])
-    run_dotbot("-vv")
-
-    stderr = capfd.readouterr().err.splitlines()
-    assert any(line.startswith("apple") for line in stderr)
-
-
-def test_shell_cli_verbosity_stderr_with_explicit_stdout_off(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that commands can output to STDERR with STDOUT explicitly off."""
-
-    dotfiles.write_config(
-        [
-            {
-                "shell": [
-                    {
-                        "command": "echo apple >&2",
-                        "stdout": False,
-                    }
-                ],
-            }
-        ]
-    )
-    run_dotbot("-vv")
-
-    stderr = capfd.readouterr().err.splitlines()
-    assert any(line.startswith("apple") for line in stderr)
-
-
-def test_shell_cli_verbosity_stderr_with_defaults_stdout_off(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that commands can output to STDERR with defaults:shell:stdout=False."""
-
-    dotfiles.write_config(
-        [
-            {
-                "defaults": {
-                    "shell": {
-                        "stdout": False,
-                    },
-                },
-            },
-            {
-                "shell": [
-                    {"command": "echo apple >&2"},
-                ],
-            },
-        ]
-    )
-    run_dotbot("-vv")
-
-    stderr = capfd.readouterr().err.splitlines()
-    assert any(line.startswith("apple") for line in stderr)
-
-
-def test_shell_single_v_verbosity_stdout(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that a single '-v' verbosity doesn't override stdout=False."""
-
-    dotfiles.write_config([{"shell": [{"command": "echo apple"}]}])
-    run_dotbot("-v")
-
-    stdout = capfd.readouterr().out.splitlines()
-    assert not any(line.startswith("apple") for line in stdout)
-
-
-def test_shell_single_v_verbosity_stderr(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that a single '-v' verbosity doesn't override stderr=False."""
-
-    dotfiles.write_config([{"shell": [{"command": "echo apple >&2"}]}])
-    run_dotbot("-v")
-
-    stderr = capfd.readouterr().err.splitlines()
-    assert not any(line.startswith("apple") for line in stderr)
-
-
-def test_shell_compact_stdout_1(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that shell command stdout works in compact form."""
+    The defaults apply to them.
+    """
 
     dotfiles.write_config(
         [
             {"defaults": {"shell": {"stdout": True}}},
-            {"shell": ["echo apple"]},
+            {"shell": [entry]},
         ]
     )
     run_dotbot()
 
-    stdout = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("apple") for line in stdout)
-
-
-def test_shell_compact_stdout_2(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that shell command stdout works in compact form."""
-
-    dotfiles.write_config(
-        [
-            {"defaults": {"shell": {"stdout": True}}},
-            {"shell": [["echo apple", "echoing message"]]},
-        ]
-    )
-    run_dotbot()
-
-    stdout = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("apple") for line in stdout)
-    assert any(line.startswith("echoing message") for line in stdout)
-
-
-def test_shell_stdout_disabled_by_default(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that the shell command disables stdout by default."""
-
-    dotfiles.write_config(
-        [
-            {
-                "shell": ["echo banana"],
-            }
-        ]
-    )
-    run_dotbot()
-
-    stdout = capfd.readouterr().out.splitlines()
-    assert not any(line.startswith("banana") for line in stdout)
+    # the last line is the summary
+    lines = [line.strip() for line in capfd.readouterr().out.splitlines()]
+    assert lines[:-1] == expected
 
 
 def test_shell_can_override_defaults(
@@ -254,85 +107,36 @@ def test_shell_can_override_defaults(
     assert not any(line.startswith("apple") for line in stdout)
 
 
-def test_shell_quiet_default(
+@pytest.mark.parametrize(
+    ("options", "expected"),
+    [
+        pytest.param(
+            {"description": "echoing a thing..."},
+            ["echoing a thing... [echo banana]"],
+            id="not-quiet",
+        ),
+        pytest.param(
+            {"description": "echoing a thing...", "quiet": True},
+            ["echoing a thing..."],
+            id="quiet",
+        ),
+        pytest.param({"quiet": True}, [], id="quiet-without-description"),
+    ],
+)
+def test_shell_quiet(
+    options: dict[str, object],
+    expected: list[str],
     capfd: pytest.CaptureFixture[str],
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that quiet is off by default."""
+    """Verify that quiet shows only the description of a command, if it has one."""
 
-    dotfiles.write_config(
-        [
-            {
-                "shell": [
-                    {
-                        "command": "echo banana",
-                        "description": "echoing a thing...",
-                    }
-                ],
-            }
-        ]
-    )
+    dotfiles.write_config([{"shell": [{"command": "echo banana", **options}]}])
     run_dotbot()
 
-    stdout = capfd.readouterr().out.splitlines()
-    assert not any(line.startswith("banana") for line in stdout)
-    assert any("echo banana" in line for line in stdout)
-    assert any(line.startswith("echoing a thing...") for line in stdout)
-
-
-def test_shell_quiet_enabled_with_description(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that only the description is shown when quiet is enabled."""
-
-    dotfiles.write_config(
-        [
-            {
-                "shell": [
-                    {
-                        "command": "echo banana",
-                        "description": "echoing a thing...",
-                        "quiet": True,
-                    }
-                ],
-            }
-        ]
-    )
-    run_dotbot()
-
-    stdout = capfd.readouterr().out.splitlines()
-    assert not any(line.startswith("banana") for line in stdout)
-    assert not any("echo banana" in line for line in stdout)
-    assert any(line.startswith("echoing a thing...") for line in stdout)
-
-
-def test_shell_quiet_enabled_without_description(
-    capfd: pytest.CaptureFixture[str],
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify nothing is shown when quiet is enabled with no description."""
-
-    dotfiles.write_config(
-        [
-            {
-                "shell": [
-                    {
-                        "command": "echo banana",
-                        "quiet": True,
-                    }
-                ],
-            }
-        ]
-    )
-    run_dotbot()
-
-    stdout = capfd.readouterr().out.splitlines()
-    assert not any(line.startswith("banana") for line in stdout)
-    assert not any(line.startswith("echo banana") for line in stdout)
+    # the last line is the summary
+    assert capfd.readouterr().out.splitlines()[:-1] == expected
 
 
 def test_shell_dry_run(

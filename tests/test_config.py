@@ -8,34 +8,26 @@ import pytest
 from tests.conftest import Dotfiles
 
 
-def test_config_blank(dotfiles: Dotfiles, run_dotbot: Callable[..., None]) -> None:
-    """Verify blank configs work."""
+@pytest.mark.parametrize("document", ["[]", ""])
+def test_config_without_tasks(
+    capfd: pytest.CaptureFixture[str],
+    document: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that an empty list and an empty file are valid configs."""
 
-    dotfiles.write_config([])
-    run_dotbot()
-
-
-def test_config_empty(dotfiles: Dotfiles, run_dotbot: Callable[..., None]) -> None:
-    """Verify empty configs work."""
-
-    dotfiles.write("config.yaml", "")
+    dotfiles.write("config.yaml", document)
     run_dotbot("-c", os.path.join(dotfiles.directory, "config.yaml"), custom=True)
 
-
-def test_json(home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]) -> None:
-    """Verify JSON configs work."""
-
-    document = json.dumps([{"create": ["~/d"]}])
-    dotfiles.write("config.json", document)
-    run_dotbot("-c", os.path.join(dotfiles.directory, "config.json"), custom=True)
-
-    assert os.path.isdir(os.path.join(home, "d"))
+    stderr = capfd.readouterr().err
+    assert "warning: No tasks given in configuration, no work to do" in stderr
 
 
 def test_json_tabs(
     home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
 ) -> None:
-    """Verify JSON configs with tabs work."""
+    """Verify that JSON configs are read as JSON, which allows tabs (YAML doesn't)."""
 
     document = """[\n\t{\n\t\t"create": ["~/d"]\n\t}\n]"""
     dotfiles.write("config.json", document)
@@ -63,19 +55,35 @@ def test_multiple_config(
     assert os.path.isdir(os.path.join(home, "d2"))
 
 
-def test_config_task_not_mapping(
+@pytest.mark.parametrize(
+    ("document", "error"),
+    [
+        pytest.param(
+            "link: {}", "Configuration file must be a list of tasks", id="not-a-list"
+        ),
+        pytest.param(
+            "- link",
+            "Each task must be a mapping of actions, but found: 'link'",
+            id="not-a-mapping",
+        ),
+        pytest.param("- link: [", "Could not read config file:", id="syntax-error"),
+    ],
+)
+def test_config_invalid(
     capfd: pytest.CaptureFixture[str],
+    document: str,
+    error: str,
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that a task that is not a mapping of actions gives a clear error."""
+    """Verify that an invalid config gives a clear error."""
 
-    dotfiles.write_config(["link"])
-    with pytest.raises(SystemExit):
-        run_dotbot()
+    dotfiles.write("config.yaml", document)
+    with pytest.raises(SystemExit) as excinfo:
+        run_dotbot("-c", os.path.join(dotfiles.directory, "config.yaml"), custom=True)
 
-    stderr = capfd.readouterr().err
-    assert "Each task must be a mapping of actions, but found: 'link'" in stderr
+    assert excinfo.value.code == 1
+    assert f"error: {error}" in capfd.readouterr().err
 
 
 @pytest.mark.parametrize(

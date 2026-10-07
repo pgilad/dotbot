@@ -1,6 +1,5 @@
 import builtins
 import ctypes
-import json
 import os
 import shutil
 import sys
@@ -14,6 +13,14 @@ import pytest
 import yaml
 
 import dotbot.cli
+
+TESTS_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+
+
+def plugin_file(name: str) -> str:
+    """Get the path of the test plugin dotbot_plugin_<name>.py."""
+
+    return os.path.join(TESTS_DIRECTORY, f"dotbot_plugin_{name}.py")
 
 
 def get_long_path(path: str) -> str:
@@ -47,17 +54,12 @@ def get_path_from_fd(fd: int) -> str | None:
         if sys.platform == "darwin":
             import fcntl  # noqa: PLC0415
 
-            f_getpath = getattr(
-                fcntl, "F_GETPATH", 50
-            )  # Python 3.9+ exposes fcntl.F_GETPATH
-            path_buf = b"\0" * 1024
-            result = fcntl.fcntl(fd, f_getpath, path_buf)
+            result = fcntl.fcntl(fd, fcntl.F_GETPATH, b"\0" * 1024)
             return result.rstrip(b"\0").decode("utf-8")
     except (OSError, ValueError):
         return None
-    else:
-        # Windows doesn't have an easy way to get the path from an fd
-        return None
+    # Windows doesn't have an easy way to get the path from an fd
+    return None
 
 
 def wrap_function(
@@ -86,7 +88,7 @@ def wrap_function(
                 assert dir_path is not None, msg
 
                 msg = f"The dir_fd argument to {function_path}() must point to a directory rooted in {root}"
-                assert dir_path[: len(str(root))] == str(root), msg
+                assert dir_path.startswith(root), msg
             # On Windows, we can't easily validate dir_fd, but it's reasonably safe because the dir_fd typically comes
             # from opening a path we already validated (e.g., from shutil.rmtree), and this is test infrastructure with
             # trusted (non-adversarial) code.
@@ -101,7 +103,7 @@ def wrap_function(
         msg = (
             f"The '{kwarg_key}' argument to {function_path}() must be rooted in {root}"
         )
-        assert value[: len(str(root))] == str(root), msg
+        assert value.startswith(root), msg
 
         return function(*args, **kwargs)
 
@@ -120,13 +122,12 @@ def wrap_open(root: str) -> Callable[..., Any]:
         elif len(args) >= 2:
             mode = args[1]
 
-        msg = "The 'file' argument to open() must be an absolute path"
         if value != os.devnull and "w" in mode:
+            msg = "The 'file' argument to open() must be an absolute path"
             assert value == os.path.abspath(value), msg
 
-        msg = f"The 'file' argument to open() must be rooted in {root}"
-        if value != os.devnull and "w" in mode:
-            assert value[: len(str(root))] == str(root), msg
+            msg = f"The 'file' argument to open() must be rooted in {root}"
+            assert value.startswith(root), msg
 
         return wrapped(*args, **kwargs)
 
@@ -170,8 +171,9 @@ def standardize_tmp() -> None:
 
 @pytest.fixture(autouse=True)
 def root(standardize_tmp: None) -> Generator[str]:
-    _ = standardize_tmp
     """Create a temporary directory for the duration of each test."""
+
+    _ = standardize_tmp
 
     # Reset allowed_tempfile_internal_unlink_calls.
     global allowed_tempfile_internal_unlink_calls  # noqa: PLW0603
@@ -260,7 +262,8 @@ def root(standardize_tmp: None) -> Generator[str]:
 
     patches.append(mock.patch("tempfile._mkstemp_inner", wrap_mkstemp_inner))
 
-    [patch.start() for patch in patches]
+    for patch in patches:
+        patch.start()
     try:
         yield current_root
     finally:
@@ -293,8 +296,6 @@ class Dotfiles:
     """Create and manage a dotfiles directory for a test."""
 
     def __init__(self, root: str):
-        self.root = root
-        self.config = None
         self._config_filename: str | None = None
         self.directory = os.path.join(root, "dotfiles")
         os.mkdir(self.directory)
@@ -309,31 +310,20 @@ class Dotfiles:
         with open(path, "w") as file:
             file.write(content)
 
-    def write_config(
-        self, config: Any, serializer: str = "yaml", path: str | None = None
-    ) -> str:
+    def copy_plugin(self, name: str, path: str) -> str:
+        """Copy the test plugin dotbot_plugin_<name>.py and return its path."""
+
+        destination = os.path.abspath(os.path.join(self.directory, path))
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        shutil.copy(plugin_file(name), destination)
+        return destination
+
+    def write_config(self, config: Any) -> str:
         """Write a dotbot config and return the filename."""
 
-        assert serializer in {"json", "yaml"}, "Only json and yaml are supported"
-        if serializer == "yaml":
-            serialize: Callable[[Any], str] = yaml.dump
-        else:  # serializer == "json"
-            serialize = json.dumps
-
-        if path is not None:
-            msg = "The config file path must be an absolute path"
-            assert path == os.path.abspath(path), msg
-
-            msg = f"The config file path must be rooted in {root}"
-            assert path[: len(str(root))] == str(root), msg
-
-            self._config_filename = path
-        else:
-            self._config_filename = os.path.join(self.directory, "install.conf.yaml")
-        self.config = config
-
+        self._config_filename = os.path.join(self.directory, "install.conf.yaml")
         with open(self._config_filename, "w") as file:
-            file.write(serialize(config))
+            file.write(yaml.dump(config))
         return self._config_filename
 
     @property
@@ -360,11 +350,11 @@ def run_dotbot(dotfiles: Dotfiles) -> Callable[..., None]:
     and the caller will be responsible for all CLI arguments.
     """
 
-    def runner(*argv: Any, **kwargs: Any) -> None:
-        argv = ("dotbot", *argv)
-        if kwargs.get("custom", False) is not True:
-            argv = (*argv, "-c", dotfiles.config_filename)
-        with mock.patch("sys.argv", list(argv)):
+    def runner(*argv: str, custom: bool = False) -> None:
+        arguments = ["dotbot", *argv]
+        if not custom:
+            arguments += ["-c", dotfiles.config_filename]
+        with mock.patch("sys.argv", arguments):
             dotbot.cli.main()
 
     return runner

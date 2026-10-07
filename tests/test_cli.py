@@ -9,82 +9,44 @@ import pytest
 import dotbot
 from dotbot.dispatcher import Dispatcher
 from dotbot.plugins import Link, Shell
-from tests.conftest import Dotfiles
+from tests.conftest import Dotfiles, plugin_file
 
 
-def test_except_create(
-    capfd: pytest.CaptureFixture[str],
+@pytest.mark.parametrize(
+    ("arguments", "skipped"),
+    [
+        pytest.param(["--only", "create"], {"shell", "link"}, id="only"),
+        pytest.param(["--only", "create", "shell"], {"link"}, id="only-multiple"),
+        pytest.param(["--except", "create"], {"create"}, id="except"),
+        pytest.param(
+            ["--except", "create", "shell"], {"create", "shell"}, id="except-multiple"
+        ),
+    ],
+)
+def test_only_and_except(
+    arguments: list[str],
+    skipped: set[str],
     home: str,
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that `--except` works as intended."""
+    """Verify that `--only` and `--except` select the directives that run."""
 
+    dotfiles.write("f")
     dotfiles.write_config(
         [
             {"create": ["~/a"]},
-            {
-                "shell": [
-                    {"command": "echo success", "stdout": True},
-                ]
-            },
+            {"shell": ["echo shell > shell"]},
+            {"link": {"~/.f": "f"}},
         ]
     )
-    run_dotbot("--except", "create")
+    run_dotbot(*arguments)
 
-    assert not os.path.exists(os.path.join(home, "a"))
-    stdout = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("success") for line in stdout)
-
-
-def test_except_shell(
-    capfd: pytest.CaptureFixture[str],
-    home: str,
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that `--except` works as intended."""
-
-    dotfiles.write_config(
-        [
-            {"create": ["~/a"]},
-            {
-                "shell": [
-                    {"command": "echo failure", "stdout": True},
-                ]
-            },
-        ]
+    assert os.path.isdir(os.path.join(home, "a")) is ("create" not in skipped)
+    assert os.path.exists(os.path.join(dotfiles.directory, "shell")) is (
+        "shell" not in skipped
     )
-    run_dotbot("--except", "shell")
-
-    assert os.path.exists(os.path.join(home, "a"))
-    stdout = capfd.readouterr().out.splitlines()
-    assert not any(line.startswith("failure") for line in stdout)
-
-
-def test_except_multiples(
-    capfd: pytest.CaptureFixture[str],
-    home: str,
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that `--except` works with multiple exceptions."""
-
-    dotfiles.write_config(
-        [
-            {"create": ["~/a"]},
-            {
-                "shell": [
-                    {"command": "echo failure", "stdout": True},
-                ]
-            },
-        ]
-    )
-    run_dotbot("--except", "create", "shell")
-
-    assert not os.path.exists(os.path.join(home, "a"))
-    stdout = capfd.readouterr().out.splitlines()
-    assert not any(line.startswith("failure") for line in stdout)
+    assert os.path.islink(os.path.join(home, ".f")) is ("link" not in skipped)
 
 
 def test_exit_on_failure(
@@ -104,27 +66,6 @@ def test_exit_on_failure(
 
     assert os.path.isdir(os.path.join(home, "a"))
     assert not os.path.isdir(os.path.join(home, "b"))
-
-
-def test_only(
-    capfd: pytest.CaptureFixture[str],
-    home: str,
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that `--only` works as intended."""
-
-    dotfiles.write_config(
-        [
-            {"create": ["~/a"]},
-            {"shell": [{"command": "echo success", "stdout": True}]},
-        ]
-    )
-    run_dotbot("--only", "shell")
-
-    assert not os.path.exists(os.path.join(home, "a"))
-    stdout = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("success") for line in stdout)
 
 
 def test_only_with_defaults(
@@ -149,40 +90,14 @@ def test_only_with_defaults(
     assert any(line.startswith("success") for line in stdout)
 
 
-def test_only_with_multiples(
-    capfd: pytest.CaptureFixture[str],
-    home: str,
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that `--only` works as intended."""
-
-    dotfiles.write_config(
-        [
-            {"create": ["~/a"]},
-            {"shell": [{"command": "echo success", "stdout": True}]},
-            {"link": ["~/.f"]},
-        ]
-    )
-    run_dotbot("--only", "create", "shell")
-
-    assert os.path.isdir(os.path.join(home, "a"))
-    stdout = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("success") for line in stdout)
-    assert not os.path.exists(os.path.join(home, ".f"))
-
-
 def test_plugin_loading_file(
     home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
 ) -> None:
     """Verify that plugins can be loaded by file."""
 
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_file.py"
-    )
-    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "file.py"))
+    plugin = dotfiles.copy_plugin("file", "file.py")
     dotfiles.write_config([{"plugin_file": "~"}])
-    run_dotbot("--plugin", os.path.join(dotfiles.directory, "file.py"))
+    run_dotbot("--plugin", plugin)
 
     with open(os.path.join(home, "flag-file")) as file:
         assert file.read() == "file plugin loading works"
@@ -193,13 +108,7 @@ def test_plugin_loading_directory(
 ) -> None:
     """Verify that plugins can be loaded from a directory."""
 
-    dotfiles.makedirs("plugins")
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_directory.py"
-    )
-    shutil.copy(
-        plugin_file, os.path.join(dotfiles.directory, "plugins", "directory.py")
-    )
+    dotfiles.copy_plugin("directory", os.path.join("plugins", "directory.py"))
     dotfiles.write_config([{"plugin_directory": "~"}])
     run_dotbot("--plugin-dir", os.path.join(dotfiles.directory, "plugins"))
 
@@ -217,23 +126,11 @@ def test_issue_357(
     using a plugin that imports from dotbot.plugins."""
 
     _ = home
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_issue_357.py"
-    )
     dotfiles.write_config([{"shell": [{"command": "echo apple", "stdout": True}]}])
+    run_dotbot("--plugin", plugin_file("issue_357"))
 
-    run_dotbot("--plugin", plugin_file)
-
-    assert (
-        len(
-            [
-                line
-                for line in capfd.readouterr().out.splitlines()
-                if line.strip() == "apple"
-            ]
-        )
-        == 1
-    )
+    lines = [line.strip() for line in capfd.readouterr().out.splitlines()]
+    assert lines.count("apple") == 1
 
 
 def test_disable_builtin_plugins(
@@ -251,46 +148,25 @@ def test_disable_builtin_plugins(
     assert not os.path.exists(os.path.join(home, ".f"))
 
 
-def test_plugin_context_plugin(
+@pytest.mark.parametrize("plugin", ["context_plugin", "dispatcher_no_plugins"])
+def test_plugin_makes_dispatcher(
+    plugin: str,
     capfd: pytest.CaptureFixture[str],
     home: str,
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that the plugin context is available to plugins."""
+    """Verify that a plugin can make a Dispatcher that has all the plugins.
+
+    The plugin can give the plugins of its context to the Dispatcher, or give
+    no plugins (the behavior before plugins were passed in explicitly).
+    """
 
     _ = home
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_context_plugin.py"
-    )
-    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "plugin.py"))
     dotfiles.write_config(
         [{"dispatch": [{"shell": [{"command": "echo apple", "stdout": True}]}]}]
     )
-    run_dotbot("--plugin", os.path.join(dotfiles.directory, "plugin.py"))
-
-    stdout = capfd.readouterr().out.splitlines()
-    assert any(line.startswith("apple") for line in stdout)
-
-
-def test_plugin_dispatcher_no_plugins(
-    capfd: pytest.CaptureFixture[str],
-    home: str,
-    dotfiles: Dotfiles,
-    run_dotbot: Callable[..., None],
-) -> None:
-    """Verify that plugins instantiating Dispatcher without plugins work."""
-
-    _ = home
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "dotbot_plugin_dispatcher_no_plugins.py",
-    )
-    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "plugin.py"))
-    dotfiles.write_config(
-        [{"dispatch": [{"shell": [{"command": "echo apple", "stdout": True}]}]}]
-    )
-    run_dotbot("--plugin", os.path.join(dotfiles.directory, "plugin.py"))
+    run_dotbot("--plugin", dotfiles.copy_plugin(plugin, "plugin.py"))
 
     stdout = capfd.readouterr().out.splitlines()
     assert any(line.startswith("apple") for line in stdout)
@@ -304,12 +180,8 @@ def test_dry_run_unaware_plugin(
 ) -> None:
     """Verify that plugins not aware of dry-run mode do not execute actions during a dry run."""
 
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_file.py"
-    )
-    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "file.py"))
     dotfiles.write_config([{"plugin_file": "~"}])
-    run_dotbot("--plugin", os.path.join(dotfiles.directory, "file.py"), "--dry-run")
+    run_dotbot("--plugin", dotfiles.copy_plugin("file", "file.py"), "--dry-run")
 
     assert not os.path.exists(os.path.join(home, "flag-file"))
 
@@ -325,31 +197,12 @@ def test_dry_run_aware_plugin(
 ) -> None:
     """Verify that plugins that are aware of dry-run mode do execute during a dry run."""
 
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_dry_run.py"
-    )
-    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "dry_run.py"))
     dotfiles.write_config([{"dry_run": "~"}])
-    run_dotbot("--plugin", os.path.join(dotfiles.directory, "dry_run.py"), "--dry-run")
+    run_dotbot("--plugin", dotfiles.copy_plugin("dry_run", "dry_run.py"), "--dry-run")
 
     assert not os.path.exists(os.path.join(home, "flag-dry-run"))
     stdout = capfd.readouterr().out.splitlines()
     assert any(line.startswith("Would execute dry run") for line in stdout)
-
-
-def test_dry_run_aware_plugin_no_dry_run(
-    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
-) -> None:
-    """Verify that plugins that are aware of dry-run mode do execute without dry run."""
-
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_dry_run.py"
-    )
-    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "dry_run.py"))
-    dotfiles.write_config([{"dry_run": "~"}])
-    run_dotbot("--plugin", os.path.join(dotfiles.directory, "dry_run.py"))
-    with open(os.path.join(home, "flag-dry-run")) as file:
-        assert file.read() == "Dry run executed"
 
 
 def test_only_loads_plugins(
@@ -357,10 +210,7 @@ def test_only_loads_plugins(
 ) -> None:
     """Verify that `--only` doesn't skip the plugins directive."""
 
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_file.py"
-    )
-    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "file.py"))
+    dotfiles.copy_plugin("file", "file.py")
     dotfiles.write_config(
         [
             {"plugins": ["file.py"]},
@@ -388,6 +238,57 @@ def test_plugin_load_error(
     stderr = capfd.readouterr().err
     assert "error: Could not load plugins" in stderr
     assert "Traceback" not in stderr
+
+
+@pytest.mark.parametrize("argument", ["-q", "-Q"])
+def test_quiet(
+    argument: str,
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that quiet hides the actions, but not the warnings.
+
+    `-Q` is the deprecated form of `-q`.
+    """
+
+    dotfiles.write("f")
+    dotfiles.write_config([{"link": {"~/.f": {"path": "f", "unknown": True}}}])
+    run_dotbot(argument)
+
+    assert os.path.islink(os.path.join(home, ".f"))
+    output = capfd.readouterr()
+    assert output.out == ""
+    assert output.err.splitlines() == [
+        f"warning: Unknown option 'unknown' for {os.path.join('~', '.f')}"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "error"),
+    [
+        pytest.param(
+            ["--force-color", "--no-color"],
+            "`--force-color` and `--no-color` cannot both be provided",
+            id="colors",
+        ),
+        pytest.param([], "No configuration file specified", id="no-config"),
+    ],
+)
+def test_usage_error(
+    arguments: list[str],
+    error: str,
+    capfd: pytest.CaptureFixture[str],
+    run_dotbot: Callable[..., None],
+) -> None:
+    """Verify that wrong arguments give an error."""
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_dotbot(*arguments, custom=True)
+
+    assert excinfo.value.code == 1
+    assert f"error: {error}" in capfd.readouterr().err
 
 
 def test_python_m_dotbot() -> None:
@@ -538,13 +439,9 @@ def test_plugin_failure_without_error(
 ) -> None:
     """Verify that a plugin that fails without an error message gets one."""
 
-    plugin_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "dotbot_plugin_fail.py"
-    )
-    shutil.copy(plugin_file, os.path.join(dotfiles.directory, "fail.py"))
     dotfiles.write_config([{"fail": None}])
     with pytest.raises(SystemExit):
-        run_dotbot("--plugin", os.path.join(dotfiles.directory, "fail.py"))
+        run_dotbot("--plugin", dotfiles.copy_plugin("fail", "fail.py"))
 
     assert capfd.readouterr().err.splitlines() == [
         "error: Action fail failed",
