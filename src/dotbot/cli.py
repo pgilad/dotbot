@@ -2,7 +2,7 @@ import os
 import subprocess
 import sys
 import traceback
-from argparse import SUPPRESS, ArgumentParser, RawTextHelpFormatter
+from argparse import ArgumentParser, RawTextHelpFormatter
 from typing import Any
 
 import dotbot
@@ -14,9 +14,6 @@ from dotbot.util import module, string
 
 
 def add_options(parser: ArgumentParser) -> None:
-    parser.add_argument(
-        "-Q", "--super-quiet", action="store_true", help=SUPPRESS
-    )  # deprecated
     parser.add_argument(
         "-q", "--quiet", action="store_true", help="suppress most output"
     )
@@ -55,14 +52,6 @@ def add_options(parser: ArgumentParser) -> None:
         "--disable-built-in-plugins",
         action="store_true",
         help="disable built-in plugins",
-    )
-    parser.add_argument(
-        "--plugin-dir",
-        action="append",
-        dest="plugin_dirs",
-        default=[],
-        metavar="PLUGIN_DIR",
-        help=SUPPRESS,  # deprecated
     )
     parser.add_argument(
         "--only", nargs="+", help="only run specified directives", metavar="DIRECTIVE"
@@ -169,7 +158,7 @@ def main() -> None:
         # set the level and reset the counts each time, because Messenger is a
         # singleton, and main() can run more than once in a process
         level = Level.ACTION
-        if options.super_quiet or options.quiet:
+        if options.quiet:
             level = Level.WARNING
         if options.verbose > 0:
             level = Level.INFO if options.verbose == 1 else Level.DEBUG
@@ -190,9 +179,6 @@ def main() -> None:
         if not options.disable_built_in_plugins:
             plugins.extend([Clean, Create, Link, Shell])
         try:
-            module.load_plugins(
-                options.plugin_dirs, plugins
-            )  # note, plugin_dirs is deprecated
             module.load_plugins(options.plugins, plugins)
         except Exception as e:  # noqa: BLE001
             log.error(f"Could not load plugins:\n{string.indent_lines(str(e))}")
@@ -244,7 +230,3 @@ def main() -> None:
     except KeyboardInterrupt:
         log.error("Operation aborted")
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

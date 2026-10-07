@@ -22,9 +22,9 @@ class Directory(dotbot.Plugin):
         if data != "no-check-context":
             self._log.debug("Attempting to get options from Context")
             options = self._context.options()
-            if len(options.plugin_dirs) != 1:
+            if len(options.plugins) != 1:
                 self._log.debug(
-                    f"Context.options.plugin_dirs length is {len(options.plugin_dirs)}, expected 1"
+                    f"Context.options.plugins length is {len(options.plugins)}, expected 1"
                 )
                 return False
 

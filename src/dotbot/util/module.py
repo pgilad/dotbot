@@ -7,9 +7,6 @@ from types import ModuleType
 
 from dotbot.plugin import Plugin
 
-# We keep references to loaded modules so they don't get garbage collected.
-loaded_modules: list[ModuleType] = []
-
 
 def load(path: str) -> list[type[Plugin]]:
     basename = os.path.basename(path)
@@ -23,7 +20,6 @@ def load(path: str) -> list[type[Plugin]]:
                 plugins.append(possible_plugin)
         except TypeError:
             pass
-    loaded_modules.append(loaded_module)
     return plugins
 
 

@@ -70,7 +70,7 @@ class Messenger(metaclass=Singleton):
         """
         Get a color (terminal escape sequence) according to a level.
         """
-        if not self._use_color or level < Level.DEBUG:
+        if not self._use_color:
             return ""
         if level < Level.INFO:
             return Color.GRAY

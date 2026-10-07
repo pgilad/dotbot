@@ -1,38 +1,55 @@
 # Contributing
 
-All kinds of contributions to Dotbot are greatly appreciated. For someone unfamiliar with the code base, the most efficient way to contribute is usually to submit a [feature request](#feature-requests) or [bug report](#bug-reports). If you want to dive into the source code, you can submit a [patch](#patches) as well, either working on your own ideas or [existing issues][issues].
+Bug reports, feature requests, and patches are welcome as [issues] and [pull requests]. Before you work on a large change, open an issue to discuss it. In a bug report, include the Dotbot version (`dotbot --version`), the operating system, the configuration file, and the error messages.
 
-## Feature Requests
+## Development
 
-Do you have an idea for an awesome new feature for Dotbot? Please [submit a feature request][issue]. It's great to hear about new ideas.
+Dotbot uses the [Hatch] project manager. Hatch installs the dependencies and runs each tool in an isolated [environment][hatch-environments].
 
-If you are inclined to do so, you're welcome to [fork][fork] Dotbot, work on implementing the feature yourself, and submit a patch. In this case, it's *highly recommended* that you first [open an issue][issue] describing your enhancement to get early feedback on the new feature that you are implementing. This will help avoid wasted efforts and ensure that your work is incorporated into the code base.
+```sh
+hatch test                 # run the tests; -a for all the Python versions
+hatch run types:check      # check the types with mypy
+hatch check fmt --fix      # format with Ruff
+hatch check code --fix     # lint with Ruff
+hatch build                # build the wheel and the sdist into dist/
+hatch run dotbot -c path/to/install.conf.yaml --dry-run  # run Dotbot from the checkout
+```
 
-## Bug Reports
+To run one test, add its ID, such as `hatch test tests/test_shell.py::test_shell_can_override_defaults`. [CI][ci] runs these checks without `--fix`.
 
-Did something go wrong with Dotbot? Sorry about that! Bug reports are greatly appreciated!
+The tests run shell commands and change files. [`tests/conftest.py`][conftest] keeps them in a temporary directory, and makes a test fail if it writes to a different location.
 
-When you [submit a bug report][issue], please include relevant information such as Dotbot version, operating system, configuration file, error messages, and steps to reproduce the bug. The more details you can include, the easier it is to find and fix the bug.
+## Demo
 
-## Patches
+The GIF and the screenshot in the README are recorded with [VHS] (`brew install vhs`). After a change to the output of Dotbot, record them again from the root of the repository:
 
-Want to hack on Dotbot? Awesome!
+```sh
+vhs docs/demo/demo.tape
+vhs docs/demo/dry-run.tape
+```
 
-If there are [open issues][issues], you're more than welcome to work on those - this is probably the best way to contribute to Dotbot. If you have your own ideas, that's great too! In that case, before working on substantial changes to the code base, it is *highly recommended* that you first [open an issue][issue] describing what you intend to work on.
+The tapes need uv and git. [`docs/demo/setup.sh`][demo-setup] runs Dotbot from the checkout in a temporary home directory.
 
-**Patches are submitted as [pull requests][pull-requests].**
+## Releasing
 
-Any changes to the code base should follow the style and coding conventions used in the rest of the project. The version history should be clean, and commit messages should be descriptive and [properly formatted][commit-messages]. It's recommended that you add unit tests to demonstrate that the bug is fixed (or that the feature works).
+Dotbot isn't on PyPI, because the name `dotbot` on PyPI belongs to a different project. The [GitHub releases][releases] have the wheel and the sdist.
 
-See the [Dotbot development guide][development] to learn how to run the tests, type checking, and more.
+1. Set the version in [`src/dotbot/__about__.py`][about].
+2. For a new minor or major version, such as 2.1.0, add an entry for it (`- v2.1`) at the top of [`CHANGELOG.md`][changelog]. A patch version doesn't need an entry.
+3. Commit the changes, and push them to `main`.
+4. Create a tag for the version, such as `v2.1.0`, and push it.
 
----
+The [release workflow][release] runs the tests, makes sure that the tag agrees with the version and that the changelog has an entry for a minor or major version, and creates a GitHub release. The release has the changelog entry, the generated notes, the wheel, and the sdist.
 
-If you have any questions about anything, feel free to [open an issue][issue]!
-
-[issue]: https://github.com/pgilad/dotbot/issues/new
 [issues]: https://github.com/pgilad/dotbot/issues
-[fork]: https://github.com/pgilad/dotbot/fork
-[pull-requests]: https://github.com/pgilad/dotbot/pulls
-[commit-messages]: https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
-[development]: DEVELOPMENT.md
+[pull requests]: https://github.com/pgilad/dotbot/pulls
+[Hatch]: https://hatch.pypa.io/
+[hatch-environments]: https://hatch.pypa.io/latest/environment/
+[ci]: .github/workflows/ci.yml
+[conftest]: tests/conftest.py
+[VHS]: https://github.com/charmbracelet/vhs
+[demo-setup]: docs/demo/setup.sh
+[releases]: https://github.com/pgilad/dotbot/releases
+[about]: src/dotbot/__about__.py
+[changelog]: CHANGELOG.md
+[release]: .github/workflows/release.yml

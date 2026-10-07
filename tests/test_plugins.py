@@ -64,7 +64,7 @@ def test_plugin_command_line_and_config(
             {"plugin_directory": "no-check-context"},
         ]
     )
-    run_dotbot("--plugin-dir", os.path.join(dotfiles.directory, "plugins"))
+    run_dotbot("--plugin", os.path.join(dotfiles.directory, "plugins"))
 
     with open(os.path.join(home, "flag-file")) as file:
         assert file.read() == "file plugin loading works"

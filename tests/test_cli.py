@@ -110,7 +110,7 @@ def test_plugin_loading_directory(
 
     dotfiles.copy_plugin("directory", os.path.join("plugins", "directory.py"))
     dotfiles.write_config([{"plugin_directory": "~"}])
-    run_dotbot("--plugin-dir", os.path.join(dotfiles.directory, "plugins"))
+    run_dotbot("--plugin", os.path.join(dotfiles.directory, "plugins"))
 
     with open(os.path.join(home, "flag-directory")) as file:
         assert file.read() == "directory plugin loading works"
@@ -240,22 +240,17 @@ def test_plugin_load_error(
     assert "Traceback" not in stderr
 
 
-@pytest.mark.parametrize("argument", ["-q", "-Q"])
 def test_quiet(
-    argument: str,
     capfd: pytest.CaptureFixture[str],
     home: str,
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that quiet hides the actions and the summaries, but not the warnings.
-
-    `-Q` is the deprecated form of `-q`.
-    """
+    """Verify that quiet hides the actions and the summaries, but not the warnings."""
 
     dotfiles.write("f")
     dotfiles.write_config([{"link": {"~/.f": {"path": "f", "unknown": True}}}])
-    run_dotbot(argument)
+    run_dotbot("-q")
 
     assert os.path.islink(os.path.join(home, ".f"))
     output = capfd.readouterr()

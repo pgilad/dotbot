@@ -125,7 +125,7 @@ Use `--dry-run` to see the changes first. Here, Dotbot doesn't replace `~/.zshrc
 
 ## Contributing
 
-Feature requests, bug reports, and patches are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and [DEVELOPMENT.md](DEVELOPMENT.md).
+Feature requests, bug reports, and patches are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

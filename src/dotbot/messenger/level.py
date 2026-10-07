@@ -2,7 +2,6 @@ from enum import Enum
 
 
 class Level(Enum):
-    NOTSET = 0
     DEBUG = 10
     INFO = 15
     LOWINFO = 15  # Deprecated: use INFO instead  # noqa: PIE796
