@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/pgilad/dotbot/actions/workflows/ci.yml"><img src="https://github.com/pgilad/dotbot/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/pgilad/dotbot/releases"><img src="https://img.shields.io/github/v/release/pgilad/dotbot" alt="Latest release"></a>
-  <a href="LICENSE.md"><img src="https://img.shields.io/github/license/pgilad/dotbot" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/pgilad/dotbot" alt="MIT license"></a>
 </p>
 
 <p align="center">
@@ -129,7 +129,7 @@ Feature requests, bug reports, and patches are welcome. See [CONTRIBUTING.md](CO
 
 ## License
 
-Copyright (c) Anish Athalye and Gilad Peleg. Released under the [MIT License](LICENSE.md).
+Copyright (c) Anish Athalye and Gilad Peleg. Released under the [MIT License](LICENSE).
 
 This project started as a fork of [Dotbot](https://github.com/anishathalye/dotbot) by Anish Athalye.
 

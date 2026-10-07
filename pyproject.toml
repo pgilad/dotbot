@@ -12,7 +12,7 @@ authors = [
 description = "A tool that bootstraps your dotfiles"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE.md"]
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 classifiers = [
   "Development Status :: 5 - Production/Stable",
