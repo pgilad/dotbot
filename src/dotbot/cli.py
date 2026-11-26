@@ -9,6 +9,7 @@ import dotbot
 from dotbot.config import ConfigReader, ReadingError
 from dotbot.dispatcher import Dispatcher, DispatchError
 from dotbot.messenger import Level, Messenger
+from dotbot.plugin import Plugin
 from dotbot.plugins import Clean, Create, Link, Shell
 from dotbot.util import module, string
 
@@ -67,7 +68,12 @@ def add_options(parser: ArgumentParser) -> None:
         "-n",
         "--dry-run",
         action="store_true",
-        help="print what would be done, without doing it",
+        help="show planned changes and skip shell commands and link conditions",
+    )
+    parser.add_argument(
+        "--evaluate-conditions",
+        action="store_true",
+        help="run link condition commands during a dry run",
     )
     parser.add_argument(
         "--force-color",
@@ -139,7 +145,7 @@ def git_commit() -> str | None:
         )
         toplevel, commit = output.splitlines()
         in_checkout = os.path.samefile(toplevel, project_directory)
-    except (OSError, ValueError, subprocess.CalledProcessError):
+    except OSError, ValueError, subprocess.CalledProcessError:
         return None
     return commit if in_checkout else None
 
@@ -175,7 +181,7 @@ def main() -> None:
         else:
             log.use_color(sys.stdout.isatty() and sys.stderr.isatty())
 
-        plugins = []
+        plugins: list[type[Plugin]] = []
         if not options.disable_built_in_plugins:
             plugins.extend([Clean, Create, Link, Shell])
         try:

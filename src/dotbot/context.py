@@ -48,3 +48,8 @@ class Context:
     def dry_run(self) -> bool:
         # a Dispatcher that a plugin makes can have no options
         return bool(getattr(self._options, "dry_run", False))
+
+    def evaluate_conditions(self) -> bool:
+        return not self.dry_run() or bool(
+            getattr(self._options, "evaluate_conditions", False)
+        )

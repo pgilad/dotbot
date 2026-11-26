@@ -1116,7 +1116,9 @@ def test_link_summary(
         assert lines[-2:] == [summary, "link: nothing to do"]
 
 
+@pytest.mark.parametrize("option", ["force", "backup"])
 def test_target_is_not_overwritten_by_symlink_trickery(
+    option: str,
     capsys: pytest.CaptureFixture[str],
     home: str,
     dotfiles: Dotfiles,
@@ -1145,7 +1147,7 @@ def test_target_is_not_overwritten_by_symlink_trickery(
                     "link": {
                         "relink": True,
                         "create": True,
-                        "force": True,
+                        option: True,
                     },
                 }
             },
@@ -1166,6 +1168,73 @@ def test_target_is_not_overwritten_by_symlink_trickery(
     assert "appears to be the same file" in stderr
     # Verify that the file was not overwritten.
     assert ssh_config.read_text() == "preserve me!"
+
+
+@pytest.mark.parametrize("option", ["force", "backup"])
+@pytest.mark.parametrize("flags", [(), ("--dry-run",)])
+def test_hardlink_directory_keeps_destination(
+    option: str,
+    flags: tuple[str, ...],
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    dotfiles.write("directory/child", "source")
+    destination = pathlib.Path(home) / "file"
+    destination.write_text("original")
+    dotfiles.write_config(
+        [{"link": {"~/file": {"path": "directory", "type": "hardlink", option: True}}}]
+    )
+
+    with pytest.raises(SystemExit):
+        run_dotbot(*flags)
+
+    assert destination.read_text() == "original"
+    assert os.listdir(home) == ["file"]
+    assert "target is a directory" in capfd.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("option", "directory"),
+    [("backup", False), ("force", False), ("force", True)],
+)
+def test_link_install_failure_keeps_destination(
+    option: str,
+    directory: bool,  # noqa: FBT001
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    dotfiles.write("file", "source")
+    destination = pathlib.Path(home) / "file"
+    if directory:
+        os.mkdir(str(destination))
+    original = destination / "child" if directory else destination
+    original.write_text("original")
+    dotfiles.write_config([{"link": {"~/file": {"path": "file", option: True}}}])
+    rename = os.rename
+    replace = os.replace
+
+    def rename_unless_installing(src: str, dst: str) -> None:
+        if os.path.basename(src) == "replacement":
+            raise PermissionError(13, "Permission denied")
+        rename(src, dst)
+
+    def replace_unless_installing(src: str, dst: str) -> None:
+        if os.path.basename(src) == "replacement":
+            raise PermissionError(13, "Permission denied")
+        replace(src, dst)
+
+    with (
+        patch("os.rename", side_effect=rename_unless_installing),
+        patch("os.replace", side_effect=replace_unless_installing),
+        pytest.raises(SystemExit),
+    ):
+        run_dotbot()
+
+    assert original.read_text() == "original"
+    assert os.listdir(home) == ["file"]
 
 
 @pytest.mark.parametrize(
@@ -1414,23 +1483,26 @@ def test_link_dry_run(
     )
 
 
+@pytest.mark.parametrize("flags", [(), ("--evaluate-conditions",)])
 def test_link_dry_run_if(
+    flags: tuple[str, ...],
     capfd: pytest.CaptureFixture[str],
     home: str,
     dotfiles: Dotfiles,
     run_dotbot: Callable[..., None],
 ) -> None:
-    """Verify that the link plugin does run condition checks during a dry run."""
+    """Verify that conditions in a dry run require an explicit option."""
 
     dotfiles.write("f", "apple")
     dotfiles.write("g", "pear")
+    side_effect = os.path.join(home, "side_effect")
     dotfiles.write_config(
         [
             {
                 "link": {
                     "~/.f": {
                         "path": "f",
-                        "if": "touch " + os.path.join(home, "side_effect"),
+                        "if": f'echo test > "{side_effect}"',
                     },
                     "~/.g": {
                         "path": "g",
@@ -1440,20 +1512,24 @@ def test_link_dry_run_if(
             }
         ]
     )
-    run_dotbot("-n")
+    run_dotbot("-n", *flags)
 
-    assert os.path.exists(os.path.join(home, "side_effect"))
+    assert os.path.exists(side_effect) == bool(flags)
     assert not os.path.exists(os.path.join(home, ".f"))
 
-    lines = capfd.readouterr().out.splitlines()
+    output = capfd.readouterr()
+    lines = output.out.splitlines()
     assert (
         f"Would create symlink {os.path.join('~', '.f')} -> {os.path.join(dotfiles.directory, 'f')}"
         in lines
-    )
+    ) == bool(flags)
     assert not any(
         line.startswith(f"Would create symlink {os.path.join('~', '.g')} ")
         for line in lines
     )
+    if not flags:
+        assert "Skipping conditional link" in output.err
+        assert "link: 2 skipped" in lines
 
 
 def test_link_dry_run_create(
@@ -1580,8 +1656,8 @@ def test_link_dry_run_overwrite(
         pytest.param(
             "existing",
             {"force": True},
-            "Failed to remove ~/subdir/existing",
-            id="remove",
+            "Linking failed ~/subdir/existing -> {target}",
+            id="replace",
         ),
     ],
 )
@@ -1819,6 +1895,10 @@ def test_link_copy_directory(
     with open(os.path.join(home, "d", "sub", "b")) as file:
         assert file.read() == "banana"
 
+    os.makedirs(os.path.join(dotfiles.directory, "d", "new-empty"))
+    run_dotbot()
+    assert os.path.isdir(os.path.join(home, "d", "new-empty"))
+
     with open(os.path.join(home, "d", "a"), "w") as file:
         file.write("pear")
     with open(os.path.join(home, "d", "extra"), "w") as file:
@@ -1973,8 +2053,9 @@ def test_link_copy_fails_if_comparison_fails(
     assert f"Failed to compare {os.path.join('~', 'a')}" in capfd.readouterr().err
 
 
+@pytest.mark.parametrize("option", ["force", "backup"])
 def test_link_copy_failure_keeps_copy(
-    home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
+    option: str, home: str, dotfiles: Dotfiles, run_dotbot: Callable[..., None]
 ) -> None:
     """Verify that a failed update of a copy keeps the copy as it was.
 
@@ -1985,7 +2066,7 @@ def test_link_copy_failure_keeps_copy(
     with open(os.path.join(home, "f"), "w") as file:
         file.write("pear")
     dotfiles.write_config(
-        [{"link": {"~/f": {"path": "f", "type": "copy", "force": True}}}]
+        [{"link": {"~/f": {"path": "f", "type": "copy", option: True}}}]
     )
 
     def copy_part(_source: str, destination: str) -> None:

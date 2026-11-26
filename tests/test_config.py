@@ -87,6 +87,39 @@ def test_config_invalid(
 
 
 @pytest.mark.parametrize(
+    ("directive", "value", "expected"),
+    [
+        ("plugins", "null", "a list of paths"),
+        ("plugins", "custom.py", "a list of paths"),
+        ("plugins", "[123]", "a list of paths"),
+        ("defaults", "null", "a mapping"),
+    ],
+)
+def test_config_invalid_directive(
+    directive: str,
+    value: str,
+    expected: str,
+    capfd: pytest.CaptureFixture[str],
+    home: str,
+    dotfiles: Dotfiles,
+    run_dotbot: Callable[..., None],
+) -> None:
+    dotfiles.write("valid.yaml", "- create: ['~/should-not-exist']")
+    dotfiles.write("invalid.yaml", f"- {directive}: {value}")
+    path = os.path.join(dotfiles.directory, "invalid.yaml")
+    with pytest.raises(SystemExit) as error:
+        run_dotbot(
+            "-c", os.path.join(dotfiles.directory, "valid.yaml"), path, custom=True
+        )
+
+    assert error.value.code == 1
+    assert not os.path.exists(os.path.join(home, "should-not-exist"))
+    assert capfd.readouterr().err.strip() == (
+        f"error: Invalid '{directive}' directive in {path}: expected {expected}"
+    )
+
+
+@pytest.mark.parametrize(
     ("config", "warning"),
     [
         (

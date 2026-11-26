@@ -10,6 +10,8 @@ Plugins add directives to Dotbot. For example:
 
 Load plugin files, or directories of plugin files, with the `plugins` directive. Paths are relative to the base directory.
 
+Dotbot imports these files during a dry run. Code at module level runs at import time. In your plugin, put file changes and shell commands in `handle()` and check `self._context.dry_run()` before you make changes.
+
 ```yaml
 - plugins:
     - dotbot-plugins/dotbot-brew/

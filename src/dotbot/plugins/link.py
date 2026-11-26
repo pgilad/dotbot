@@ -1,4 +1,5 @@
 import contextlib
+import errno
 import filecmp
 import glob
 import os
@@ -8,6 +9,7 @@ import sys
 import tempfile
 from collections import Counter
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Literal
 
 from dotbot.plugin import Plugin
@@ -62,8 +64,6 @@ class Link(Plugin):
         return self._process_links(data)
 
     def _process_links(self, links: Any) -> bool:
-        # the failures of the steps before a link, such as a backup
-        success = True
         results: Counter[Outcome] = Counter()
         defaults = self._context.defaults().get("link", {})
         for key in unknown_options(defaults, self._options):
@@ -121,12 +121,19 @@ class Link(Plugin):
             else:
                 path = self._default_target(link_name, target)
             path = normslash(path)
-            if test is not None and not self._test_success(test):
-                self._log.info(
-                    f"Skipping {display_path(link_name)}, because `if: {test}` is false"
-                )
-                results["skipped"] += 1
-                continue
+            if test is not None:
+                if not self._context.evaluate_conditions():
+                    self._log.warning(
+                        f"Skipping conditional link {display_path(link_name)} during dry run"
+                    )
+                    results["skipped"] += 1
+                    continue
+                if not self._test_success(test):
+                    self._log.info(
+                        f"Skipping {display_path(link_name)}, because `if: {test}` is false"
+                    )
+                    results["skipped"] += 1
+                    continue
             path = os.path.normpath(os.path.expandvars(os.path.expanduser(path)))
             # check after the test, which can guard a link that uses a variable;
             # only warn, because a file name can contain a literal "$"
@@ -143,111 +150,47 @@ class Link(Plugin):
                     self._log.warning(
                         f"No files match {display_path(link_name)} -> {display_path(path)}"
                     )
-                for glob_full_item in glob_results:
-                    # Find common dirname between pattern and the item:
-                    glob_dirname = os.path.commonpath([path, glob_full_item])
+                pairs = []
+                for match in glob_results:
+                    glob_dirname = os.path.commonpath([path, match])
                     glob_item = (
-                        glob_full_item
-                        if len(glob_dirname) == 0
-                        else glob_full_item[len(glob_dirname) + 1 :]
+                        match[len(glob_dirname) + 1 :] if glob_dirname else match
                     )
-                    # Add prefix to basepath, if provided
-                    if base_prefix:
-                        glob_item = base_prefix + glob_item
-                    # where is it going
-                    glob_link_name = os.path.join(link_name, glob_item)
-                    if create:
-                        success &= self._create(glob_link_name)
-                    if link_type == "copy":
-                        outcome = self._copy(
-                            glob_full_item,
-                            glob_link_name,
-                            canonical_path=canonical_path,
-                            ignore_missing=ignore_missing,
-                            force=force,
-                            relink=relink,
-                            backup=backup,
-                        )
-                        results[outcome] += 1
-                        continue
-                    did_backup = False
-                    did_delete = False
-                    if backup:
-                        did_backup, backup_success = self._backup(glob_link_name)
-                        success &= backup_success
-                    # we only need to consider force/relink if we didn't do a backup
-                    if (force or relink) and not (did_backup and backup_success):
-                        did_delete, delete_success = self._delete(
-                            glob_full_item,
-                            glob_link_name,
-                            relative=relative,
-                            canonical_path=canonical_path,
-                            force=force,
-                        )
-                        success &= delete_success
-                    outcome = self._link(
-                        glob_full_item,
-                        glob_link_name,
-                        relative=relative,
-                        canonical_path=canonical_path,
-                        ignore_missing=ignore_missing,
-                        link_type=link_type,
-                        assume_gone=(did_backup or did_delete),
+                    pairs.append(
+                        (match, os.path.join(link_name, base_prefix + glob_item))
                     )
-                    results[outcome] += 1
             else:
-                if create:
-                    success &= self._create(link_name)
-                if not ignore_missing and not self._exists(
-                    os.path.join(self._context.base_directory(), path)
-                ):
-                    # we seemingly check this twice (here and in _link) because
-                    # if the file doesn't exist and force is True, we don't
-                    # want to remove the original (this is tested by test_link_force_leaves_when_nonexistent)
+                pairs = [(path, link_name)]
+
+            for target_path, destination in pairs:
+                if create and not self._create(destination):
                     results["failed"] += 1
-                    self._log.error(
-                        f"Nonexistent target {display_path(link_name)} -> {display_path(path)}"
-                    )
                     continue
                 if link_type == "copy":
                     outcome = self._copy(
-                        path,
-                        link_name,
+                        target_path,
+                        destination,
                         canonical_path=canonical_path,
                         ignore_missing=ignore_missing,
                         force=force,
                         relink=relink,
                         backup=backup,
                     )
-                    results[outcome] += 1
-                    continue
-                did_backup = False
-                did_delete = False
-                if backup:
-                    did_backup, backup_success = self._backup(link_name)
-                    success &= backup_success
-                # we only need to consider force/relink if we didn't do a backup
-                if (force or relink) and not (did_backup and backup_success):
-                    did_delete, delete_success = self._delete(
-                        path,
-                        link_name,
+                else:
+                    outcome = self._link(
+                        target_path,
+                        destination,
                         relative=relative,
                         canonical_path=canonical_path,
+                        ignore_missing=ignore_missing,
+                        link_type=link_type,
                         force=force,
+                        relink=relink,
+                        backup=backup,
                     )
-                    success &= delete_success
-                outcome = self._link(
-                    path,
-                    link_name,
-                    relative=relative,
-                    canonical_path=canonical_path,
-                    ignore_missing=ignore_missing,
-                    link_type=link_type,
-                    assume_gone=(did_backup or did_delete),
-                )
                 results[outcome] += 1
         self._log.summary(self._summary(results))
-        return success and not results["failed"]
+        return not results["failed"]
 
     def _summary(self, results: Counter[Outcome]) -> str:
         """
@@ -309,12 +252,6 @@ class Link(Plugin):
         ret = set(include) - set(exclude)
         return list(ret)
 
-    def _is_link(self, path: str) -> bool:
-        """
-        Returns true if the path is a symbolic link.
-        """
-        return os.path.islink(os.path.expanduser(path))
-
     def _link_target(self, path: str) -> str:
         """
         Returns the target of the symbolic link.
@@ -325,24 +262,10 @@ class Link(Plugin):
             path = path[4:]
         return path
 
-    def _exists(self, path: str) -> bool:
-        """
-        Returns true if the path exists.
-        """
-        path = os.path.expanduser(path)
-        return os.path.exists(path)
-
-    def _lexists(self, path: str) -> bool:
-        """
-        Returns true if the path exists (including broken symlinks).
-        """
-        path = os.path.expanduser(path)
-        return os.path.lexists(path)
-
     def _create(self, path: str) -> bool:
         success = True
         parent = os.path.abspath(os.path.join(os.path.expanduser(path), os.pardir))
-        if not self._exists(parent):
+        if not os.path.exists(parent):
             self._log.debug(f"Try to create parent: {parent}")
             if self._context.dry_run():
                 self._log.action(f"Would create directory {display_path(parent)}")
@@ -358,99 +281,95 @@ class Link(Plugin):
                 self._log.action(f"Creating directory {display_path(parent)}")
         return success
 
-    def _backup(self, path: str) -> tuple[bool, bool]:
-        if self._exists(path) and not self._is_link(path):
-            timestamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
-            backup_name = f"{path}.dotbot-backup.{timestamp}"
-            self._log.debug(f"Try to backup file {path} to {backup_name}")
-            if self._context.dry_run():
-                self._log.action(
-                    f"Would backup {display_path(path)} to {display_path(backup_name)}"
-                )
-                return True, True
-            try:
-                os.rename(
-                    os.path.abspath(os.path.expanduser(path)),
-                    os.path.abspath(os.path.expanduser(backup_name)),
-                )
-            except OSError as e:
-                self._log.error(
-                    f"Failed to backup file {display_path(path)} to {display_path(backup_name)}: {error_reason(e)}"
-                )
-                return False, False
-            else:
-                self._log.action(
-                    f"Backed up file {display_path(path)} to {display_path(backup_name)}"
-                )
-                return True, True
-        return False, True
+    def _backup_name(self, path: str) -> str:
+        timestamp = datetime.now(UTC).astimezone().strftime("%Y%m%d-%H%M%S")
+        return f"{path}.dotbot-backup.{timestamp}"
 
-    def _delete(
-        self,
-        target: str,
-        path: str,
-        *,
-        relative: bool,
-        canonical_path: bool,
-        force: bool,
-    ) -> tuple[bool, bool]:
-        success = True
-        removed = False
-        target = os.path.join(
-            self._context.base_directory(canonical_path=canonical_path), target
-        )
-        fullpath = os.path.abspath(os.path.expanduser(path))
-        if (
-            self._exists(path)
-            and not self._is_link(path)
-            and os.path.realpath(fullpath) == target
-        ):
-            # Special case: The path is not a symlink but resolves to the target anyway.
-            # Deleting the path would actually delete the target.
-            # This may happen if a parent directory is a symlink.
-            self._log.error(
-                f"{display_path(path)} appears to be the same file as {display_path(target)}"
+    def _source_in_destination(self, source: str, destination: str) -> bool:
+        # Resolve the destination's parents, but keep its final entry. A link
+        # at the destination can point to the source and still be safe to move.
+        source_path = Path(source)
+        destination_path = Path(destination)
+        destination_entry = destination_path.parent.resolve() / destination_path.name
+        return any(
+            candidate.is_relative_to(entry)
+            for candidate in (
+                source_path,
+                source_path.parent.resolve() / source_path.name,
+                source_path.resolve(),
             )
-            return False, False
-        if relative:
-            target = self._relative_path(target, fullpath)
-        if (self._is_link(path) and self._link_target(path) != target) or (
-            self._lexists(path) and not self._is_link(path)
-        ):
-            if self._context.dry_run():
-                # same condition as below: without force, only symlinks are removed
-                if os.path.islink(fullpath) or force:
-                    self._log.action(f"Would remove {display_path(path)}")
-                    removed = True
-            else:
-                try:
-                    if os.path.islink(fullpath):
-                        os.unlink(fullpath)
-                        removed = True
-                    elif force:
-                        if os.path.isdir(fullpath):
-                            shutil.rmtree(fullpath)
-                            removed = True
-                        else:
-                            os.remove(fullpath)
-                            removed = True
-                except OSError as e:
-                    self._log.error(
-                        f"Failed to remove {display_path(path)}: {error_reason(e)}"
-                    )
-                    success = False
-                else:
-                    if removed:
-                        self._log.action(f"Removing {display_path(path)}")
-        return removed, success
+            for entry in (destination_path, destination_entry)
+        )
 
-    def _relative_path(self, target: str, link_name: str) -> str:
-        """
-        Returns the relative path to get to the target file from the
-        link location.
-        """
-        link_dir = os.path.dirname(link_name)
-        return os.path.relpath(target, link_dir)
+    def _move_to_empty_path(self, source: str, destination: str) -> None:
+        if os.path.lexists(destination):
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), destination)
+        os.rename(source, destination)
+
+    def _install_replacement(
+        self, staged: str, destination: str, backup_path: str | None
+    ) -> None:
+        # Replace ordinary entries in one operation where the OS permits it.
+        if (
+            backup_path is None
+            and sys.platform != "win32"
+            and not (os.path.isdir(destination) and not os.path.islink(destination))
+            and not (os.path.isdir(staged) and not os.path.islink(staged))
+        ):
+            os.replace(staged, destination)
+            return
+
+        # Keep the original outside the staging directory so a failed restore
+        # leaves it available even after the staged replacement is removed.
+        holding_area = None
+        if backup_path is None:
+            holding_area = tempfile.mkdtemp(
+                prefix=".dotbot-original-", dir=os.path.dirname(destination)
+            )
+            original = os.path.join(holding_area, "original")
+        else:
+            original = backup_path
+
+        try:
+            self._move_to_empty_path(destination, original)
+        except OSError:
+            if holding_area is not None:
+                with contextlib.suppress(OSError):
+                    os.rmdir(holding_area)
+            raise
+        try:
+            self._move_to_empty_path(staged, destination)
+        except BaseException:
+            try:
+                self._move_to_empty_path(original, destination)
+            except OSError as error:
+                self._log.error(
+                    f"Could not restore {display_path(destination)}: {error_reason(error)}"
+                    f". Original kept at {display_path(original)}"
+                )
+                holding_area = None
+            finally:
+                if holding_area is not None:
+                    with contextlib.suppress(OSError):
+                        os.rmdir(holding_area)
+            raise
+
+        if holding_area is not None:
+            try:
+                self._remove_path(original)
+                os.rmdir(holding_area)
+            except OSError as error:
+                self._log.warning(
+                    f"Could not remove the old contents at {display_path(original)}: {error_reason(error)}"
+                )
+
+    def _create_link(
+        self, source: str, target: str, destination: str, link_type: str
+    ) -> None:
+        if link_type == "symlink":
+            os.symlink(target, destination, target_is_directory=os.path.isdir(source))
+        else:
+            os.link(source, destination)
 
     def _link(
         self,
@@ -461,94 +380,122 @@ class Link(Plugin):
         canonical_path: bool,
         ignore_missing: bool,
         link_type: str,
-        assume_gone: bool,
+        force: bool,
+        relink: bool,
+        backup: bool,
     ) -> Outcome:
-        """
-        Links link_name to target.
-
-        The caller must ensure that the target exists.
-
-        Returns the result: created, in place, or failed.
-        """
-
-        link_path = os.path.abspath(os.path.expanduser(link_name))
-        base_directory = self._context.base_directory(canonical_path=canonical_path)
-        absolute_target = os.path.join(base_directory, target)
-        link_name = os.path.normpath(link_name)
-        target_path = (
-            self._relative_path(absolute_target, link_path)
-            if relative
-            else absolute_target
+        destination = os.path.abspath(os.path.expanduser(link_name))
+        source = os.path.join(
+            self._context.base_directory(canonical_path=canonical_path), target
         )
-
-        # we need to use absolute_target below because our cwd is the dotfiles
-        # directory, and if target_path is relative, it will be relative to the
-        # link directory
-        if (
-            (not self._lexists(link_name)) or (self._context.dry_run() and assume_gone)
-        ) and (ignore_missing or self._exists(absolute_target)):
-            if self._context.dry_run():
-                self._log.action(
-                    f"Would create {link_type} {display_path(link_name)} -> {display_path(target_path)}"
-                )
-                return "created"
-            try:
-                if link_type == "symlink":
-                    os.symlink(target_path, link_path)
-                else:  # link_type == "hardlink"
-                    os.link(absolute_target, link_path)
-            except OSError as e:
-                self._log.error(
-                    f"Linking failed {display_path(link_name)} -> {display_path(target_path)}: {error_reason(e)}"
-                )
-                return "failed"
-            else:
-                self._log.action(
-                    f"Creating {link_type} {display_path(link_name)} -> {display_path(target_path)}"
-                )
-                return "created"
-
-        # Failure case: The link name exists and is a symlink
-        if self._is_link(link_name):
-            if link_type == "symlink":
-                if self._link_target(link_name) == target_path:
-                    # Idempotent case: The configured symlink already exists
-                    self._log.info(
-                        f"Link exists {display_path(link_name)} -> {display_path(target_path)}"
-                    )
-                    return "in place"
-
-                # The existing symlink isn't pointing at the target.
-                # Distinguish between an incorrect symlink and a broken ("invalid") symlink.
-                terminology = "Incorrect" if self._exists(link_name) else "Invalid"
-                self._log.error(
-                    f"{terminology} link {display_path(link_name)} -> {display_path(self._link_target(link_name))}"
-                )
-                return "failed"
-
+        source_exists = os.path.exists(source)
+        shown_name = display_path(link_name)
+        if not source_exists and not ignore_missing:
             self._log.error(
-                f"{display_path(link_name)} already exists but is a symbolic link, not a hard link"
+                f"Nonexistent target {shown_name} -> {display_path(target)}"
             )
             return "failed"
 
-        # Failure case: The link name exists
+        link_target = (
+            os.path.relpath(source, os.path.dirname(destination))
+            if relative
+            else source
+        )
+        shown_target = display_path(link_target)
+        exists = os.path.lexists(destination)
+        symlink = os.path.islink(destination)
         if (
-            link_type == "hardlink"
-            and self._exists(absolute_target)
-            and os.path.samefile(link_path, absolute_target)
+            symlink
+            and link_type == "symlink"
+            and self._link_target(destination) == link_target
         ):
-            # Idempotent case: The configured hardlink already exists
-            self._log.info(
-                f"Link exists {display_path(link_name)} -> {display_path(target_path)}"
-            )
+            self._log.info(f"Link exists {shown_name} -> {shown_target}")
+            return "in place"
+        if (
+            exists
+            and not symlink
+            and link_type == "hardlink"
+            and source_exists
+            and not os.path.isdir(source)
+            and os.path.samefile(destination, source)
+        ):
+            self._log.info(f"Link exists {shown_name} -> {shown_target}")
             return "in place"
 
-        found = "directory" if os.path.isdir(link_path) else "file"
-        expected = "hard link" if link_type == "hardlink" else "symbolic link"
-        self._log.error(
-            f"{display_path(link_name)} already exists but is a {found}, not a {expected}"
+        backup_path = (
+            self._backup_name(destination)
+            if exists and backup and not symlink
+            else None
         )
-        return "failed"
+        replace = exists and (backup_path is not None or force or (symlink and relink))
+        if exists and not replace:
+            if symlink and link_type == "symlink":
+                terminology = "Incorrect" if os.path.exists(destination) else "Invalid"
+                self._log.error(
+                    f"{terminology} link {shown_name} -> {display_path(self._link_target(destination))}"
+                )
+            else:
+                found = (
+                    "symbolic link"
+                    if symlink
+                    else "directory"
+                    if os.path.isdir(destination)
+                    else "file"
+                )
+                expected = "hard link" if link_type == "hardlink" else "symbolic link"
+                self._log.error(
+                    f"{shown_name} already exists but is a {found}, not a {expected}"
+                )
+            return "failed"
+
+        if link_type == "hardlink" and (not source_exists or os.path.isdir(source)):
+            reason = (
+                "target is a directory" if source_exists else "target does not exist"
+            )
+            self._log.error(f"Linking failed {shown_name} -> {shown_target}: {reason}")
+            return "failed"
+        if self._source_in_destination(source, destination):
+            self._log.error(
+                f"{shown_name} appears to be the same file as {display_path(source)} or contains it"
+            )
+            return "failed"
+
+        if self._context.dry_run():
+            if backup_path is not None and os.path.lexists(backup_path):
+                self._log.error(f"Backup already exists at {display_path(backup_path)}")
+                return "failed"
+            if backup_path is not None:
+                self._log.action(
+                    f"Would backup {shown_name} to {display_path(backup_path)}"
+                )
+            elif replace:
+                self._log.action(f"Would remove {shown_name}")
+            self._log.action(f"Would create {link_type} {shown_name} -> {shown_target}")
+            return "created"
+
+        try:
+            if replace:
+                with tempfile.TemporaryDirectory(
+                    prefix=".dotbot-", dir=os.path.dirname(destination)
+                ) as workspace:
+                    staged = os.path.join(workspace, "replacement")
+                    self._create_link(source, link_target, staged, link_type)
+                    self._install_replacement(staged, destination, backup_path)
+            else:
+                self._create_link(source, link_target, destination, link_type)
+        except OSError as error:
+            self._log.error(
+                f"Linking failed {shown_name} -> {shown_target}: {error_reason(error)}"
+            )
+            return "failed"
+        if backup_path is not None:
+            self._log.action(
+                f"Backed up file {shown_name} to {display_path(backup_path)}"
+            )
+        elif replace:
+            self._log.action(f"Removing {shown_name}")
+        self._log.action(f"Creating {link_type} {shown_name} -> {shown_target}")
+        return "created"
 
     def _copy(
         self,
@@ -593,18 +540,16 @@ class Link(Plugin):
             return "failed"
 
         exists = os.path.lexists(destination)
-        if exists and os.path.islink(destination):
-            if not (relink or force):
-                self._log.error(
-                    f"{display_path(link_name)} already exists but is a symbolic link, not a copy"
-                )
-                return "failed"
-            if not self._remove(destination, link_name):
-                return "failed"
-            exists = False
-        # a file can't be copied over a directory, or the other way around
+        symlink = os.path.islink(destination)
+        if symlink and not (relink or force):
+            self._log.error(
+                f"{display_path(link_name)} already exists but is a symbolic link, not a copy"
+            )
+            return "failed"
         source_is_directory = os.path.isdir(source)
-        other_type = exists and source_is_directory != os.path.isdir(destination)
+        other_type = (
+            exists and not symlink and source_is_directory != os.path.isdir(destination)
+        )
         if other_type and not (force or backup):
             expected, found = (
                 ("directory", "file") if source_is_directory else ("file", "directory")
@@ -613,7 +558,7 @@ class Link(Plugin):
                 f"{display_path(link_name)} already exists but is a {found}, not a {expected}"
             )
             return "failed"
-        if exists and not other_type:
+        if exists and not (symlink or other_type):
             try:
                 differs = self._differs(source, destination)
             except OSError as e:
@@ -631,36 +576,77 @@ class Link(Plugin):
                     f"Copy {display_path(link_name)} differs from {display_path(source)}, keeping it"
                 )
                 return "kept"
-        if exists and backup:
-            _, backup_success = self._backup(link_name)
-            if not backup_success:
-                return "failed"
-            exists = False
-        if exists and other_type:
-            if not self._remove(destination, link_name):
-                return "failed"
-            exists = False
 
-        verb = "update" if exists else "create"
+        backup_path = (
+            self._backup_name(destination)
+            if exists and backup and not symlink
+            else None
+        )
+        replace = symlink or other_type or backup_path is not None
+        destination_entry = Path(destination).parent.resolve() / Path(destination).name
+        if self._source_in_destination(source, destination) or (
+            source_is_directory
+            and destination_entry.is_relative_to(Path(source).resolve())
+        ):
+            self._log.error(
+                f"Cannot copy {display_path(source)} to {display_path(link_name)}: the paths overlap"
+            )
+            return "failed"
+
+        update = exists and not replace
+        verb = "update" if update else "create"
         if self._context.dry_run():
+            if backup_path is not None and os.path.lexists(backup_path):
+                self._log.error(f"Backup already exists at {display_path(backup_path)}")
+                return "failed"
+            if backup_path is not None:
+                self._log.action(
+                    f"Would backup {display_path(link_name)} to {display_path(backup_path)}"
+                )
+            elif replace:
+                self._log.action(f"Would remove {display_path(link_name)}")
             self._log.action(
                 f"Would {verb} copy {display_path(link_name)} -> {display_path(source)}"
             )
-            return "updated" if exists else "created"
+            return "updated" if update else "created"
         try:
-            if source_is_directory:
-                self._copy_directory(source, destination)
-            else:
-                self._copy_file(source, destination)
+            self._write_copy(
+                source, destination, replace=replace, backup_path=backup_path
+            )
         except OSError as e:
             self._log.error(
                 f"Copying failed {display_path(link_name)} -> {display_path(source)}: {error_reason(e)}"
             )
             return "failed"
+        if backup_path is not None:
+            self._log.action(
+                f"Backed up file {display_path(link_name)} to {display_path(backup_path)}"
+            )
+        elif replace:
+            self._log.action(f"Removing {display_path(link_name)}")
         self._log.action(
-            f"{'Updating' if exists else 'Creating'} copy {display_path(link_name)} -> {display_path(source)}"
+            f"{'Updating' if update else 'Creating'} copy {display_path(link_name)} -> {display_path(source)}"
         )
-        return "updated" if exists else "created"
+        return "updated" if update else "created"
+
+    def _write_copy(
+        self,
+        source: str,
+        destination: str,
+        *,
+        replace: bool,
+        backup_path: str | None = None,
+    ) -> None:
+        copy = self._copy_directory if os.path.isdir(source) else self._copy_file
+        if not replace:
+            copy(source, destination)
+            return
+        with tempfile.TemporaryDirectory(
+            prefix=".dotbot-", dir=os.path.dirname(destination)
+        ) as workspace:
+            staged = os.path.join(workspace, "replacement")
+            copy(source, staged)
+            self._install_replacement(staged, destination, backup_path)
 
     def _copy_file(self, source: str, destination: str) -> None:
         """
@@ -676,12 +662,10 @@ class Link(Plugin):
         os.close(file)
         try:
             shutil.copy2(source, temporary)
-            if os.path.islink(destination) or os.path.isdir(destination):
-                self._remove_path(destination)
-            elif sys.platform == "win32" and os.path.exists(destination):
-                # Windows doesn't replace a read-only file
-                os.chmod(destination, stat.S_IWRITE)
-            os.replace(temporary, destination)
+            if os.path.lexists(destination):
+                self._install_replacement(temporary, destination, None)
+            else:
+                self._move_to_empty_path(temporary, destination)
         except BaseException:
             with contextlib.suppress(OSError):
                 self._remove_path(temporary)
@@ -694,7 +678,9 @@ class Link(Plugin):
         replaces a symlink in the destination instead of following it.
         """
         if os.path.islink(destination) or not os.path.isdir(destination):
-            self._remove_path(destination)
+            if os.path.lexists(destination):
+                self._write_copy(source, destination, replace=True)
+                return
             os.makedirs(destination)
         for name in os.listdir(source):
             source_path = os.path.join(source, name)
@@ -711,39 +697,18 @@ class Link(Plugin):
         Returns true if a file in source is missing from destination or has
         different contents. Files that are only in destination don't count.
         """
+        if os.path.islink(destination):
+            return True
         if not os.path.isdir(source):
             return not os.path.isfile(destination) or not filecmp.cmp(
                 source, destination, shallow=False
             )
         if not os.path.isdir(destination):
             return True
-        # follow symlinks, like shutil.copytree does
-        for directory, _, files in os.walk(source, followlinks=True):
-            for name in files:
-                source_file = os.path.join(directory, name)
-                destination_file = os.path.join(
-                    destination, os.path.relpath(source_file, source)
-                )
-                if not os.path.isfile(destination_file) or not filecmp.cmp(
-                    source_file, destination_file, shallow=False
-                ):
-                    return True
-        return False
-
-    def _remove(self, path: str, name: str) -> bool:
-        """
-        Removes a symlink, file, or directory. Returns true on success.
-        """
-        if self._context.dry_run():
-            self._log.action(f"Would remove {display_path(name)}")
-            return True
-        try:
-            self._remove_path(path)
-        except OSError as e:
-            self._log.error(f"Failed to remove {display_path(name)}: {error_reason(e)}")
-            return False
-        self._log.action(f"Removing {display_path(name)}")
-        return True
+        return any(
+            self._differs(os.path.join(source, name), os.path.join(destination, name))
+            for name in os.listdir(source)
+        )
 
     def _remove_path(self, path: str) -> None:
         """

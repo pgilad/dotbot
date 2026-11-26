@@ -23,6 +23,17 @@ class ConfigReader:
                 if not isinstance(task, dict):
                     msg = f"Each task must be a mapping of actions, but found: {task!r}"
                     raise ReadingError(msg)
+                if "plugins" in task:
+                    paths = task["plugins"]
+                    if not isinstance(paths, list) or any(
+                        not isinstance(plugin_path, str) or not plugin_path
+                        for plugin_path in paths
+                    ):
+                        msg = f"Invalid 'plugins' directive in {path}: expected a list of paths"
+                        raise ReadingError(msg)
+                if "defaults" in task and not isinstance(task["defaults"], dict):
+                    msg = f"Invalid 'defaults' directive in {path}: expected a mapping"
+                    raise ReadingError(msg)
             self._config.extend(config)
 
     def _read(self, config_file_path: str) -> Any:

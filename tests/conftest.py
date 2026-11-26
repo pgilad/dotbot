@@ -26,15 +26,13 @@ def plugin_file(name: str) -> str:
 def get_long_path(path: str) -> str:
     """Get the long path for a given path."""
 
-    # Do nothing for non-Windows platforms.
-    if sys.platform != "win32":
-        return path
-
-    buffer_size = 1000
-    buffer = ctypes.create_unicode_buffer(buffer_size)
-    get_long_path_name = ctypes.windll.kernel32.GetLongPathNameW
-    get_long_path_name(path, buffer, buffer_size)
-    return buffer.value
+    if sys.platform == "win32":
+        buffer_size = 1000
+        buffer = ctypes.create_unicode_buffer(buffer_size)
+        get_long_path_name = ctypes.windll.kernel32.GetLongPathNameW
+        get_long_path_name(path, buffer, buffer_size)
+        return buffer.value
+    return path
 
 
 # On Linux, tempfile.TemporaryFile() requires unlink access.
@@ -56,7 +54,7 @@ def get_path_from_fd(fd: int) -> str | None:
 
             result = fcntl.fcntl(fd, fcntl.F_GETPATH, b"\0" * 1024)
             return result.rstrip(b"\0").decode("utf-8")
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     # Windows doesn't have an easy way to get the path from an fd
     return None

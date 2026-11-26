@@ -15,7 +15,7 @@
 Dotbot reads a YAML file that tells it where your dotfiles go. It links the files into place, creates directories, and runs setup commands. It does less than you think, because version control does more than you think: Dotbot works with any VCS and doesn't manage your repository.
 
 - **One file.** Your setup is a short YAML file next to your dotfiles.
-- **Safe.** Dotbot doesn't replace your files unless you tell it to. `--dry-run` shows the changes first.
+- **Safe.** Dotbot replaces files only when you enable replacement. `--dry-run` previews changes.
 - **Idempotent.** Run it again after each `git pull`. Correct links stay as they are.
 - **Small.** Dotbot needs only Python and PyYAML.
 - **Extensible.** [Plugins](docs/plugins.md) add Homebrew, apt, secrets, and more.
@@ -106,6 +106,8 @@ The [configuration reference](docs/configuration.md) has all the options and mor
 
 Use `--dry-run` to see the changes first. Here, Dotbot doesn't replace `~/.zshrc`, because it's a file and not a link. To replace it, set `force: true`, or `backup: true` to keep a copy.
 
+Dry runs skip links with an `if` condition. Add `--evaluate-conditions` to run those commands and include the results in the preview. Dotbot imports configured plugins during a dry run. These plugins can run code when Dotbot imports them.
+
 <p align="center">
   <img src="docs/demo/dry-run.png" alt="dotbot --dry-run shows the links and directories that it would create, and an error because ~/.zshrc is a file.">
 </p>
@@ -113,7 +115,8 @@ Use `--dry-run` to see the changes first. Here, Dotbot doesn't replace `~/.zshrc
 | Option | Description |
 | --- | --- |
 | `-c`, `--config-file FILE...` | Run the tasks in these configuration files. |
-| `-n`, `--dry-run` | Show what Dotbot would do, but change nothing. |
+| `-n`, `--dry-run` | Preview changes and skip shell commands and conditional links. |
+| `--evaluate-conditions` | Run link condition commands during a dry run. |
 | `--only DIRECTIVE...` | Run only these directives. |
 | `--except DIRECTIVE...` | Run all the directives except these. |
 | `-x`, `--exit-on-failure` | Stop after the first failed directive. |

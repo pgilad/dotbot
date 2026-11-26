@@ -69,7 +69,7 @@ If the target is empty (`null`), Dotbot uses the base name of the link, without 
 | `backup` | Move an existing file or directory to `<name>.dotbot-backup.<timestamp>`, and then link. | `false` |
 | `relative` | Make a symbolic link with a relative path. | `false` |
 | `canonicalize` | Resolve symbolic links in the target path. | `true` |
-| `if` | Link only if this command succeeds. Dotbot runs it with `/bin/sh` (`cmd.exe` on Windows). | |
+| `if` | Link only if this command succeeds. Dotbot runs it with `/bin/sh` (`cmd.exe` on Windows). In a dry run, use `--evaluate-conditions` to run it. | |
 | `ignore-missing` | Link also if the target doesn't exist, and don't warn when a glob matches nothing. | `false` |
 | `glob` | Read `path` as a glob pattern, and link each file that it matches. | `false` |
 | `exclude` | Glob patterns to remove from the matches of `glob`. | `[]` |
