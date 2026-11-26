@@ -1,6 +1,6 @@
 Note: this changelog only lists feature additions, not bugfixes. For details on those, see the Git history.
 
-- Unreleased
+- v4.1
     - Skip conditional links during a dry run. Use `--evaluate-conditions` to run their condition commands.
 - v4.0
     - Remove the deprecated `-Q` (`--super-quiet`) and `--plugin-dir` options: use `-q` and `--plugin`
